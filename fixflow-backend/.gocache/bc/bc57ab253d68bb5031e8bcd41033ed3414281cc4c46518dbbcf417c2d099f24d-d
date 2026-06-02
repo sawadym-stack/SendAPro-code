@@ -1,0 +1,73 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\infrastructure\grpc\server.go:1:1
+package grpcserver
+
+import (
+	"context"
+	"net"
+
+	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+
+	authv1 "github.com/yourname/fixflow-backend/internal/adapter/grpc/pb/auth/v1"
+	jobv1 "github.com/yourname/fixflow-backend/internal/adapter/grpc/pb/job/v1"
+	notificationv1 "github.com/yourname/fixflow-backend/internal/adapter/grpc/pb/notification/v1"
+	authgrpc "github.com/yourname/fixflow-backend/internal/grpc/auth"
+	jobgrpc "github.com/yourname/fixflow-backend/internal/grpc/job"
+	notificationgrpc "github.com/yourname/fixflow-backend/internal/grpc/notification"
+	"github.com/yourname/fixflow-backend/internal/middleware"
+	"github.com/yourname/fixflow-backend/internal/pkg/token"
+)
+
+type Server struct {
+	grpc *grpc.Server
+	lis  net.Listener
+}
+
+func interceptorLogger(l *zap.Logger) grpcmiddleware.Logger {goCover_f41a4cfa3334__0[0] = 6 ; goCover_f41a4cfa3334__0[1] = goCover_f41a4cfa3334_P ; goCover_f41a4cfa3334__0[2] = 0 ; goCover_f41a4cfa3334__0[3] = 1;
+	return grpcmiddleware.LoggerFunc(func(ctx context.Context, lvl grpcmiddleware.Level, msg string, fields ...any) {goCover_f41a4cfa3334__0[4] = 1;
+		switch lvl {
+		case grpcmiddleware.LevelDebug:goCover_f41a4cfa3334__0[5] = 1;
+			l.Debug(msg, zap.Any("fields", fields))
+		case grpcmiddleware.LevelInfo:goCover_f41a4cfa3334__0[6] = 1;
+			l.Info(msg, zap.Any("fields", fields))
+		case grpcmiddleware.LevelWarn:goCover_f41a4cfa3334__0[7] = 1;
+			l.Warn(msg, zap.Any("fields", fields))
+		case grpcmiddleware.LevelError:goCover_f41a4cfa3334__0[8] = 1;
+			l.Error(msg, zap.Any("fields", fields))
+		}
+	})
+}
+
+func New(addr string, logger *zap.Logger, tokenManager *token.Manager, authSvc *authgrpc.Server, jobSvc *jobgrpc.Server, notificationSvc *notificationgrpc.Server, rateLimitInterceptor grpc.UnaryServerInterceptor) (*Server, error) {goCover_f41a4cfa3334__1[0] = 5 ; goCover_f41a4cfa3334__1[1] = goCover_f41a4cfa3334_P ; goCover_f41a4cfa3334__1[2] = 1 ; goCover_f41a4cfa3334__1[3] = 1;
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {goCover_f41a4cfa3334__1[6] = 1;
+		return nil, err
+	}
+
+	goCover_f41a4cfa3334__1[4] = 1;grpcZapOpts := []grpcmiddleware.Option{grpcmiddleware.WithLogOnEvents(grpcmiddleware.StartCall, grpcmiddleware.FinishCall)}
+	gs := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(
+			middleware.JWTAuthInterceptor(tokenManager),
+			middleware.GRPCRBACInterceptor(),
+			grpcmiddleware.UnaryServerInterceptor(interceptorLogger(logger), grpcZapOpts...),
+			rateLimitInterceptor,
+			otelgrpc.UnaryServerInterceptor(),
+		),
+		grpc.ChainStreamInterceptor(
+			middleware.JWTAuthStreamInterceptor(tokenManager),
+			middleware.GRPCRBACStreamInterceptor(),
+			otelgrpc.StreamServerInterceptor(),
+		),
+	)
+	authv1.RegisterAuthServiceServer(gs, authSvc)
+	jobv1.RegisterJobServiceServer(gs, jobSvc)
+	if notificationSvc != nil {goCover_f41a4cfa3334__1[7] = 1;
+		notificationv1.RegisterNotificationServiceServer(gs, notificationSvc)
+	}
+	goCover_f41a4cfa3334__1[5] = 1;return &Server{grpc: gs, lis: lis}, nil
+}
+
+func (s *Server) Start() error {goCover_f41a4cfa3334__2[0] = 1 ; goCover_f41a4cfa3334__2[1] = goCover_f41a4cfa3334_P ; goCover_f41a4cfa3334__2[2] = 2 ; goCover_f41a4cfa3334__2[3] = 1; return s.grpc.Serve(s.lis) }
+func (s *Server) Stop()        {goCover_f41a4cfa3334__3[0] = 1 ; goCover_f41a4cfa3334__3[1] = goCover_f41a4cfa3334_P ; goCover_f41a4cfa3334__3[2] = 3 ; goCover_f41a4cfa3334__3[3] = 1; s.grpc.GracefulStop() }

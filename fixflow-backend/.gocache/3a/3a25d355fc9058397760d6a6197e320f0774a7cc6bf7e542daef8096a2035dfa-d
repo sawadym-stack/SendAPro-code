@@ -1,0 +1,97 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\middleware\grpc_auth.go:1:1
+package middleware
+
+import (
+	"context"
+	"strings"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+
+	"github.com/yourname/fixflow-backend/internal/pkg/token"
+)
+
+type contextKey string
+
+const userIDContextKey contextKey = "userID"
+const roleContextKey contextKey = "role"
+
+func UserIDFromContext(ctx context.Context) string {goCover_47446dc6de83__0[0] = 1 ; goCover_47446dc6de83__0[1] = goCover_47446dc6de83_P ; goCover_47446dc6de83__0[2] = 0 ; goCover_47446dc6de83__0[3] = 1;
+	v, _ := ctx.Value(userIDContextKey).(string)
+	return v
+}
+func RoleFromContext(ctx context.Context) string {goCover_47446dc6de83__1[0] = 1 ; goCover_47446dc6de83__1[1] = goCover_47446dc6de83_P ; goCover_47446dc6de83__1[2] = 1 ; goCover_47446dc6de83__1[3] = 1;
+	v, _ := ctx.Value(roleContextKey).(string)
+	return v
+}
+
+func JWTAuthInterceptor(tm *token.Manager) grpc.UnaryServerInterceptor {goCover_47446dc6de83__2[0] = 12 ; goCover_47446dc6de83__2[1] = goCover_47446dc6de83_P ; goCover_47446dc6de83__2[2] = 2 ; goCover_47446dc6de83__2[3] = 1;
+	publicMethods := map[string]bool{
+		"/auth.v1.AuthService/Register":     true,
+		"/auth.v1.AuthService/Login":        true,
+		"/auth.v1.AuthService/RefreshToken": true,
+		"/auth.v1.AuthService/SendOTP":      true,
+		"/auth.v1.AuthService/VerifyOTP":    true,
+		"/auth.v1.AuthService/ValidateToken": true,
+	}
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {goCover_47446dc6de83__2[4] = 1;
+		if publicMethods[info.FullMethod] {goCover_47446dc6de83__2[10] = 1;
+			return handler(ctx, req)
+		}
+		goCover_47446dc6de83__2[5] = 1;md, ok := metadata.FromIncomingContext(ctx)
+		if !ok {goCover_47446dc6de83__2[11] = 1;
+			return nil, status.Error(codes.Unauthenticated, "missing metadata")
+		}
+		goCover_47446dc6de83__2[6] = 1;authHeader := ""
+		if vals := md.Get("authorization"); len(vals) > 0 {goCover_47446dc6de83__2[12] = 1;
+			authHeader = vals[0]
+		}
+		goCover_47446dc6de83__2[7] = 1;parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {goCover_47446dc6de83__2[13] = 1;
+			return nil, status.Error(codes.Unauthenticated, "missing bearer token")
+		}
+		goCover_47446dc6de83__2[8] = 1;claims, err := tm.Parse(parts[1])
+		if err != nil || claims.Type != "access" {goCover_47446dc6de83__2[14] = 1;
+			return nil, status.Error(codes.Unauthenticated, "invalid token")
+		}
+		goCover_47446dc6de83__2[9] = 1;ctx = context.WithValue(ctx, userIDContextKey, claims.UserID)
+		ctx = context.WithValue(ctx, roleContextKey, claims.Role)
+		return handler(ctx, req)
+	}
+}
+
+func JWTAuthStreamInterceptor(tm *token.Manager) grpc.StreamServerInterceptor {goCover_47446dc6de83__3[0] = 12 ; goCover_47446dc6de83__3[1] = goCover_47446dc6de83_P ; goCover_47446dc6de83__3[2] = 3 ; goCover_47446dc6de83__3[3] = 1;
+	publicMethods := map[string]bool{}
+	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {goCover_47446dc6de83__3[4] = 1;
+		if publicMethods[info.FullMethod] {goCover_47446dc6de83__3[10] = 1;
+			return handler(srv, ss)
+		}
+		goCover_47446dc6de83__3[5] = 1;md, ok := metadata.FromIncomingContext(ss.Context())
+		if !ok {goCover_47446dc6de83__3[11] = 1;
+			return status.Error(codes.Unauthenticated, "missing metadata")
+		}
+		goCover_47446dc6de83__3[6] = 1;authHeader := ""
+		if vals := md.Get("authorization"); len(vals) > 0 {goCover_47446dc6de83__3[12] = 1;
+			authHeader = vals[0]
+		}
+		goCover_47446dc6de83__3[7] = 1;parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {goCover_47446dc6de83__3[13] = 1;
+			return status.Error(codes.Unauthenticated, "missing bearer token")
+		}
+		goCover_47446dc6de83__3[8] = 1;claims, err := tm.Parse(parts[1])
+		if err != nil || claims.Type != "access" {goCover_47446dc6de83__3[14] = 1;
+			return status.Error(codes.Unauthenticated, "invalid token")
+		}
+		goCover_47446dc6de83__3[9] = 1;wrapped := &wrappedServerStream{ServerStream: ss, ctx: context.WithValue(context.WithValue(ss.Context(), userIDContextKey, claims.UserID), roleContextKey, claims.Role)}
+		return handler(srv, wrapped)
+	}
+}
+
+type wrappedServerStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (w *wrappedServerStream) Context() context.Context {goCover_47446dc6de83__4[0] = 1 ; goCover_47446dc6de83__4[1] = goCover_47446dc6de83_P ; goCover_47446dc6de83__4[2] = 4 ; goCover_47446dc6de83__4[3] = 1; return w.ctx }

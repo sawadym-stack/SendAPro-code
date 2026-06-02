@@ -1,0 +1,125 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\grpc\job\server.go:1:1
+package job
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	jobv1 "github.com/yourname/fixflow-backend/internal/adapter/grpc/pb/job/v1"
+	jobdomain "github.com/yourname/fixflow-backend/internal/domain/job"
+	jobuc "github.com/yourname/fixflow-backend/internal/usecase/job"
+	matchinguc "github.com/yourname/fixflow-backend/internal/usecase/matching"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+type Server struct {
+	jobv1.UnimplementedJobServiceServer
+	uc       jobuc.Usecase
+	matching matchinguc.Usecase
+}
+
+func NewServer(uc jobuc.Usecase, matching matchinguc.Usecase) *Server {goCover_97bb1365142d__0[0] = 1 ; goCover_97bb1365142d__0[1] = goCover_97bb1365142d_P ; goCover_97bb1365142d__0[2] = 0 ; goCover_97bb1365142d__0[3] = 1;
+	return &Server{uc: uc, matching: matching}
+}
+
+func (s *Server) CreateJob(ctx context.Context, req *jobv1.CreateJobRequest) (*jobv1.CreateJobResponse, error) {goCover_97bb1365142d__1[0] = 3 ; goCover_97bb1365142d__1[1] = goCover_97bb1365142d_P ; goCover_97bb1365142d__1[2] = 1 ; goCover_97bb1365142d__1[3] = 1;
+	j, err := s.uc.CreateJob(ctx, req.GetCustomerId(), req.GetServiceType(), req.GetDescription(), req.GetLat(), req.GetLng(), req.GetUrgency(), req.GetIsEmergency())
+	if err != nil {goCover_97bb1365142d__1[5] = 1;
+		return nil, err
+	}
+	goCover_97bb1365142d__1[4] = 1;return &jobv1.CreateJobResponse{Job: toPB(j)}, nil
+}
+
+func (s *Server) GetJob(ctx context.Context, req *jobv1.GetJobRequest) (*jobv1.GetJobResponse, error) {goCover_97bb1365142d__2[0] = 3 ; goCover_97bb1365142d__2[1] = goCover_97bb1365142d_P ; goCover_97bb1365142d__2[2] = 2 ; goCover_97bb1365142d__2[3] = 1;
+	j, err := s.uc.GetJob(ctx, req.GetJobId())
+	if err != nil {goCover_97bb1365142d__2[5] = 1;
+		return nil, err
+	}
+	goCover_97bb1365142d__2[4] = 1;return &jobv1.GetJobResponse{Job: toPB(j)}, nil
+}
+
+func (s *Server) UpdateJobStatus(ctx context.Context, req *jobv1.UpdateJobStatusRequest) (*jobv1.UpdateJobStatusResponse, error) {goCover_97bb1365142d__3[0] = 3 ; goCover_97bb1365142d__3[1] = goCover_97bb1365142d_P ; goCover_97bb1365142d__3[2] = 3 ; goCover_97bb1365142d__3[3] = 1;
+	j, err := s.uc.UpdateJobStatus(ctx, req.GetJobId(), req.GetNewStatus(), req.GetTechnicianId())
+	if err != nil {goCover_97bb1365142d__3[5] = 1;
+		return nil, err
+	}
+	goCover_97bb1365142d__3[4] = 1;return &jobv1.UpdateJobStatusResponse{Job: toPB(j)}, nil
+}
+
+func (s *Server) ListCustomerJobs(ctx context.Context, req *jobv1.ListCustomerJobsRequest) (*jobv1.ListCustomerJobsResponse, error) {goCover_97bb1365142d__4[0] = 5 ; goCover_97bb1365142d__4[1] = goCover_97bb1365142d_P ; goCover_97bb1365142d__4[2] = 4 ; goCover_97bb1365142d__4[3] = 1;
+	jobs, total, err := s.uc.ListCustomerJobs(ctx, req.GetCustomerId(), req.GetPage(), req.GetPageSize())
+	if err != nil {goCover_97bb1365142d__4[6] = 1;
+		return nil, err
+	}
+	goCover_97bb1365142d__4[4] = 1;resp := &jobv1.ListCustomerJobsResponse{Total: total}
+	for _, j := range jobs {goCover_97bb1365142d__4[7] = 1;
+		resp.Jobs = append(resp.Jobs, toPB(j))
+	}
+	goCover_97bb1365142d__4[5] = 1;return resp, nil
+}
+
+func (s *Server) StreamJobUpdates(req *jobv1.StreamJobUpdatesRequest, stream jobv1.JobService_StreamJobUpdatesServer) error {goCover_97bb1365142d__5[0] = 5 ; goCover_97bb1365142d__5[1] = goCover_97bb1365142d_P ; goCover_97bb1365142d__5[2] = 5 ; goCover_97bb1365142d__5[3] = 1;
+	ch, cancel := s.uc.Subscribe(req.GetJobId())
+	defer cancel()
+	for {goCover_97bb1365142d__5[4] = 1;
+		select {
+		case <-stream.Context().Done():goCover_97bb1365142d__5[5] = 1;
+			return nil
+		case j := <-ch:goCover_97bb1365142d__5[6] = 1;
+			if err := stream.Send(&jobv1.JobUpdateEvent{JobId: j.ID, Status: string(j.Status), UpdatedAt: j.UpdatedAt.Format(time.RFC3339)}); err != nil {goCover_97bb1365142d__5[7] = 1;
+				return err
+			}
+		}
+	}
+}
+
+// AcceptBooking is added for booking acceptance flow and is idempotent.
+func (s *Server) AcceptBooking(ctx context.Context, req *jobv1.UpdateJobStatusRequest) (*jobv1.UpdateJobStatusResponse, error) {goCover_97bb1365142d__6[0] = 7 ; goCover_97bb1365142d__6[1] = goCover_97bb1365142d_P ; goCover_97bb1365142d__6[2] = 6 ; goCover_97bb1365142d__6[3] = 1;
+	if s.matching == nil {goCover_97bb1365142d__6[6] = 1;
+		return nil, status.Error(codes.Unimplemented, "matching usecase not configured")
+	}
+	goCover_97bb1365142d__6[4] = 1;j, err := s.matching.AcceptBooking(ctx, req.GetTechnicianId(), req.GetJobId())
+	if err != nil {goCover_97bb1365142d__6[7] = 1;
+		if errors.Is(err, matchinguc.ErrJobAlreadyBeingAccepted) {goCover_97bb1365142d__6[9] = 1;
+			return nil, status.Error(codes.AlreadyExists, err.Error())
+		}
+		goCover_97bb1365142d__6[8] = 1;return nil, status.Error(codes.FailedPrecondition, err.Error())
+	}
+	goCover_97bb1365142d__6[5] = 1;return &jobv1.UpdateJobStatusResponse{Job: toPB(j)}, nil
+}
+
+func (s *Server) RejectBooking(ctx context.Context, req *jobv1.UpdateJobStatusRequest) (*jobv1.UpdateJobStatusResponse, error) {goCover_97bb1365142d__7[0] = 7 ; goCover_97bb1365142d__7[1] = goCover_97bb1365142d_P ; goCover_97bb1365142d__7[2] = 7 ; goCover_97bb1365142d__7[3] = 1;
+	if s.matching == nil {goCover_97bb1365142d__7[7] = 1;
+		return nil, status.Error(codes.Unimplemented, "matching usecase not configured")
+	}
+	goCover_97bb1365142d__7[4] = 1;if err := s.matching.RejectBooking(ctx, req.GetTechnicianId(), req.GetJobId()); err != nil {goCover_97bb1365142d__7[8] = 1;
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
+	}
+	goCover_97bb1365142d__7[5] = 1;j, err := s.uc.GetJob(ctx, req.GetJobId())
+	if err != nil {goCover_97bb1365142d__7[9] = 1;
+		return nil, err
+	}
+	goCover_97bb1365142d__7[6] = 1;return &jobv1.UpdateJobStatusResponse{Job: toPB(j)}, nil
+}
+
+func toPB(j *jobdomain.Job) *jobv1.Job {goCover_97bb1365142d__8[0] = 3 ; goCover_97bb1365142d__8[1] = goCover_97bb1365142d_P ; goCover_97bb1365142d__8[2] = 8 ; goCover_97bb1365142d__8[3] = 1;
+	if j == nil {goCover_97bb1365142d__8[5] = 1;
+		return nil
+	}
+	goCover_97bb1365142d__8[4] = 1;return &jobv1.Job{
+		Id:           j.ID,
+		CustomerId:   j.CustomerID,
+		TechnicianId: j.TechnicianID,
+		ServiceType:  j.ServiceType,
+		Description:  j.Description,
+		Latitude:     j.Latitude,
+		Longitude:    j.Longitude,
+		Urgency:      j.Urgency,
+		IsEmergency:  j.IsEmergency,
+		Status:       string(j.Status),
+		CreatedAt:    j.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:    j.UpdatedAt.Format(time.RFC3339),
+	}
+}

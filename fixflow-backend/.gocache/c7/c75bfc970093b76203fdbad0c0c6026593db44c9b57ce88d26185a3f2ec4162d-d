@@ -1,0 +1,154 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\usecase\auth\usecase_impl.go:1:1
+package auth
+
+import (
+	"context"
+	"crypto/rand"
+	"fmt"
+	"math/big"
+	"time"
+
+	"github.com/redis/go-redis/v9"
+	"golang.org/x/crypto/bcrypt"
+
+	"github.com/yourname/fixflow-backend/internal/domain/user"
+	"github.com/yourname/fixflow-backend/internal/pkg/token"
+)
+
+type Usecase interface {
+	Register(ctx context.Context, name, phone, email, password, role string) (userID, accessToken, refreshToken string, accessExp, refreshExp time.Time, err error)
+	Login(ctx context.Context, email, password string) (userID, accessToken, refreshToken string, accessExp, refreshExp time.Time, err error)
+	RefreshToken(ctx context.Context, refreshToken string) (accessToken string, accessExp time.Time, err error)
+	ValidateToken(ctx context.Context, rawToken string) (*token.Claims, error)
+	SendOTP(ctx context.Context, phone string) error
+	VerifyOTP(ctx context.Context, phone, otp string) (bool, error)
+}
+
+type usecase struct {
+	repo     user.UserRepository
+	redis    *redis.Client
+	tokens   *token.Manager
+	accessTTL  time.Duration
+	refreshTTL time.Duration
+}
+
+func NewUsecase(repo user.UserRepository, redis *redis.Client, tokens *token.Manager) Usecase {goCover_89f8f48568f5__0[0] = 1 ; goCover_89f8f48568f5__0[1] = goCover_89f8f48568f5_P ; goCover_89f8f48568f5__0[2] = 0 ; goCover_89f8f48568f5__0[3] = 1;
+	return &usecase{
+		repo: repo,
+		redis: redis,
+		tokens: tokens,
+		accessTTL: 15 * time.Minute,
+		refreshTTL: 7 * 24 * time.Hour,
+	}
+}
+
+func (u *usecase) Register(ctx context.Context, name, phone, email, password, role string) (string, string, string, time.Time, time.Time, error) {goCover_89f8f48568f5__1[0] = 15 ; goCover_89f8f48568f5__1[1] = goCover_89f8f48568f5_P ; goCover_89f8f48568f5__1[2] = 1 ; goCover_89f8f48568f5__1[3] = 1;
+	existing, err := u.repo.GetByEmail(ctx, email)
+	if err != nil {goCover_89f8f48568f5__1[11] = 1;
+		return "", "", "", time.Time{}, time.Time{}, err
+	}
+	goCover_89f8f48568f5__1[4] = 1;if existing != nil {goCover_89f8f48568f5__1[12] = 1;
+		return "", "", "", time.Time{}, time.Time{}, fmt.Errorf("email already registered")
+	}
+
+	goCover_89f8f48568f5__1[5] = 1;hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {goCover_89f8f48568f5__1[13] = 1;
+		return "", "", "", time.Time{}, time.Time{}, err
+	}
+
+	goCover_89f8f48568f5__1[6] = 1;usr := &user.User{Name: name, Phone: phone, Email: email, PasswordHash: string(hash), Role: user.Role(role)}
+	if err := u.repo.Create(ctx, usr); err != nil {goCover_89f8f48568f5__1[14] = 1;
+		return "", "", "", time.Time{}, time.Time{}, err
+	}
+
+	goCover_89f8f48568f5__1[7] = 1;access, accessExp, err := u.tokens.Generate(usr.ID, usr.Email, string(usr.Role), "access", u.accessTTL)
+	if err != nil {goCover_89f8f48568f5__1[15] = 1;
+		return "", "", "", time.Time{}, time.Time{}, err
+	}
+	goCover_89f8f48568f5__1[8] = 1;refresh, refreshExp, err := u.tokens.Generate(usr.ID, usr.Email, string(usr.Role), "refresh", u.refreshTTL)
+	if err != nil {goCover_89f8f48568f5__1[16] = 1;
+		return "", "", "", time.Time{}, time.Time{}, err
+	}
+	goCover_89f8f48568f5__1[9] = 1;if err := u.redis.Set(ctx, "refresh:"+refresh, usr.ID, u.refreshTTL).Err(); err != nil {goCover_89f8f48568f5__1[17] = 1;
+		return "", "", "", time.Time{}, time.Time{}, err
+	}
+	goCover_89f8f48568f5__1[10] = 1;return usr.ID, access, refresh, accessExp, refreshExp, nil
+}
+
+func (u *usecase) Login(ctx context.Context, email, password string) (string, string, string, time.Time, time.Time, error) {goCover_89f8f48568f5__2[0] = 13 ; goCover_89f8f48568f5__2[1] = goCover_89f8f48568f5_P ; goCover_89f8f48568f5__2[2] = 2 ; goCover_89f8f48568f5__2[3] = 1;
+	usr, err := u.repo.GetByEmail(ctx, email)
+	if err != nil {goCover_89f8f48568f5__2[10] = 1;
+		return "", "", "", time.Time{}, time.Time{}, err
+	}
+	goCover_89f8f48568f5__2[4] = 1;if usr == nil {goCover_89f8f48568f5__2[11] = 1;
+		return "", "", "", time.Time{}, time.Time{}, fmt.Errorf("invalid credentials")
+	}
+	goCover_89f8f48568f5__2[5] = 1;if err := bcrypt.CompareHashAndPassword([]byte(usr.PasswordHash), []byte(password)); err != nil {goCover_89f8f48568f5__2[12] = 1;
+		return "", "", "", time.Time{}, time.Time{}, fmt.Errorf("invalid credentials")
+	}
+	goCover_89f8f48568f5__2[6] = 1;access, accessExp, err := u.tokens.Generate(usr.ID, usr.Email, string(usr.Role), "access", u.accessTTL)
+	if err != nil {goCover_89f8f48568f5__2[13] = 1;
+		return "", "", "", time.Time{}, time.Time{}, err
+	}
+	goCover_89f8f48568f5__2[7] = 1;refresh, refreshExp, err := u.tokens.Generate(usr.ID, usr.Email, string(usr.Role), "refresh", u.refreshTTL)
+	if err != nil {goCover_89f8f48568f5__2[14] = 1;
+		return "", "", "", time.Time{}, time.Time{}, err
+	}
+	goCover_89f8f48568f5__2[8] = 1;if err := u.redis.Set(ctx, "refresh:"+refresh, usr.ID, u.refreshTTL).Err(); err != nil {goCover_89f8f48568f5__2[15] = 1;
+		return "", "", "", time.Time{}, time.Time{}, err
+	}
+	goCover_89f8f48568f5__2[9] = 1;return usr.ID, access, refresh, accessExp, refreshExp, nil
+}
+
+func (u *usecase) RefreshToken(ctx context.Context, refreshToken string) (string, time.Time, error) {goCover_89f8f48568f5__3[0] = 11 ; goCover_89f8f48568f5__3[1] = goCover_89f8f48568f5_P ; goCover_89f8f48568f5__3[2] = 3 ; goCover_89f8f48568f5__3[3] = 1;
+	claims, err := u.tokens.Parse(refreshToken)
+	if err != nil {goCover_89f8f48568f5__3[9] = 1;
+		return "", time.Time{}, err
+	}
+	goCover_89f8f48568f5__3[4] = 1;if claims.Type != "refresh" {goCover_89f8f48568f5__3[10] = 1;
+		return "", time.Time{}, fmt.Errorf("invalid token type")
+	}
+	goCover_89f8f48568f5__3[5] = 1;exists, err := u.redis.Exists(ctx, "refresh:"+refreshToken).Result()
+	if err != nil {goCover_89f8f48568f5__3[11] = 1;
+		return "", time.Time{}, err
+	}
+	goCover_89f8f48568f5__3[6] = 1;if exists == 0 {goCover_89f8f48568f5__3[12] = 1;
+		return "", time.Time{}, fmt.Errorf("refresh token expired or revoked")
+	}
+	goCover_89f8f48568f5__3[7] = 1;access, exp, err := u.tokens.Generate(claims.UserID, claims.Email, claims.Role, "access", u.accessTTL)
+	if err != nil {goCover_89f8f48568f5__3[13] = 1;
+		return "", time.Time{}, err
+	}
+	goCover_89f8f48568f5__3[8] = 1;return access, exp, nil
+}
+
+func (u *usecase) ValidateToken(_ context.Context, rawToken string) (*token.Claims, error) {goCover_89f8f48568f5__4[0] = 1 ; goCover_89f8f48568f5__4[1] = goCover_89f8f48568f5_P ; goCover_89f8f48568f5__4[2] = 4 ; goCover_89f8f48568f5__4[3] = 1;
+	return u.tokens.Parse(rawToken)
+}
+
+func (u *usecase) SendOTP(ctx context.Context, phone string) error {goCover_89f8f48568f5__5[0] = 3 ; goCover_89f8f48568f5__5[1] = goCover_89f8f48568f5_P ; goCover_89f8f48568f5__5[2] = 5 ; goCover_89f8f48568f5__5[3] = 1;
+	n, err := rand.Int(rand.Reader, big.NewInt(1000000))
+	if err != nil {goCover_89f8f48568f5__5[5] = 1;
+		return err
+	}
+	goCover_89f8f48568f5__5[4] = 1;otp := fmt.Sprintf("%06d", n.Int64())
+	return u.redis.Set(ctx, "otp:"+phone, otp, 5*time.Minute).Err()
+}
+
+func (u *usecase) VerifyOTP(ctx context.Context, phone, otp string) (bool, error) {goCover_89f8f48568f5__6[0] = 9 ; goCover_89f8f48568f5__6[1] = goCover_89f8f48568f5_P ; goCover_89f8f48568f5__6[2] = 6 ; goCover_89f8f48568f5__6[3] = 1;
+	stored, err := u.redis.Get(ctx, "otp:"+phone).Result()
+	if err != nil {goCover_89f8f48568f5__6[7] = 1;
+		if err == redis.Nil {goCover_89f8f48568f5__6[9] = 1;
+			return false, nil
+		}
+		goCover_89f8f48568f5__6[8] = 1;return false, err
+	}
+	goCover_89f8f48568f5__6[4] = 1;if stored != otp {goCover_89f8f48568f5__6[10] = 1;
+		return false, nil
+	}
+	goCover_89f8f48568f5__6[5] = 1;if err := u.repo.UpdateVerificationByPhone(ctx, phone, true); err != nil {goCover_89f8f48568f5__6[11] = 1;
+		return false, err
+	}
+	goCover_89f8f48568f5__6[6] = 1;_ = u.redis.Del(ctx, "otp:"+phone).Err()
+	return true, nil
+}

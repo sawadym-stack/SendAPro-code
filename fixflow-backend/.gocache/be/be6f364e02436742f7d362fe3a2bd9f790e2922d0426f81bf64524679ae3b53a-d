@@ -1,0 +1,65 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\grpc\auth\server.go:1:1
+package auth
+
+import (
+	"context"
+
+	authv1 "github.com/yourname/fixflow-backend/internal/adapter/grpc/pb/auth/v1"
+	authuc "github.com/yourname/fixflow-backend/internal/usecase/auth"
+)
+
+type Server struct {
+	authv1.UnimplementedAuthServiceServer
+	uc authuc.Usecase
+}
+
+func NewServer(uc authuc.Usecase) *Server {goCover_3df292486a63__0[0] = 1 ; goCover_3df292486a63__0[1] = goCover_3df292486a63_P ; goCover_3df292486a63__0[2] = 0 ; goCover_3df292486a63__0[3] = 1;
+	return &Server{uc: uc}
+}
+
+func (s *Server) Register(ctx context.Context, req *authv1.RegisterRequest) (*authv1.AuthTokensResponse, error) {goCover_3df292486a63__1[0] = 3 ; goCover_3df292486a63__1[1] = goCover_3df292486a63_P ; goCover_3df292486a63__1[2] = 1 ; goCover_3df292486a63__1[3] = 1;
+	uid, at, rt, aexp, rexp, err := s.uc.Register(ctx, req.GetName(), req.GetPhone(), req.GetEmail(), req.GetPassword(), req.GetRole())
+	if err != nil {goCover_3df292486a63__1[5] = 1;
+		return nil, err
+	}
+	goCover_3df292486a63__1[4] = 1;return &authv1.AuthTokensResponse{UserId: uid, AccessToken: at, RefreshToken: rt, AccessExpiresAtUnix: aexp.Unix(), RefreshExpiresAtUnix: rexp.Unix()}, nil
+}
+
+func (s *Server) Login(ctx context.Context, req *authv1.LoginRequest) (*authv1.AuthTokensResponse, error) {goCover_3df292486a63__2[0] = 3 ; goCover_3df292486a63__2[1] = goCover_3df292486a63_P ; goCover_3df292486a63__2[2] = 2 ; goCover_3df292486a63__2[3] = 1;
+	uid, at, rt, aexp, rexp, err := s.uc.Login(ctx, req.GetEmail(), req.GetPassword())
+	if err != nil {goCover_3df292486a63__2[5] = 1;
+		return nil, err
+	}
+	goCover_3df292486a63__2[4] = 1;return &authv1.AuthTokensResponse{UserId: uid, AccessToken: at, RefreshToken: rt, AccessExpiresAtUnix: aexp.Unix(), RefreshExpiresAtUnix: rexp.Unix()}, nil
+}
+
+func (s *Server) RefreshToken(ctx context.Context, req *authv1.RefreshTokenRequest) (*authv1.RefreshTokenResponse, error) {goCover_3df292486a63__3[0] = 3 ; goCover_3df292486a63__3[1] = goCover_3df292486a63_P ; goCover_3df292486a63__3[2] = 3 ; goCover_3df292486a63__3[3] = 1;
+	at, exp, err := s.uc.RefreshToken(ctx, req.GetRefreshToken())
+	if err != nil {goCover_3df292486a63__3[5] = 1;
+		return nil, err
+	}
+	goCover_3df292486a63__3[4] = 1;return &authv1.RefreshTokenResponse{AccessToken: at, AccessExpiresAtUnix: exp.Unix()}, nil
+}
+
+func (s *Server) ValidateToken(ctx context.Context, req *authv1.ValidateTokenRequest) (*authv1.ValidateTokenResponse, error) {goCover_3df292486a63__4[0] = 3 ; goCover_3df292486a63__4[1] = goCover_3df292486a63_P ; goCover_3df292486a63__4[2] = 4 ; goCover_3df292486a63__4[3] = 1;
+	claims, err := s.uc.ValidateToken(ctx, req.GetToken())
+	if err != nil {goCover_3df292486a63__4[5] = 1;
+		return &authv1.ValidateTokenResponse{Valid: false}, nil
+	}
+	goCover_3df292486a63__4[4] = 1;return &authv1.ValidateTokenResponse{UserId: claims.UserID, Email: claims.Email, Role: claims.Role, ExpiresAtUnix: claims.ExpiresAt.Unix(), Valid: true}, nil
+}
+
+func (s *Server) SendOTP(ctx context.Context, req *authv1.SendOTPRequest) (*authv1.SendOTPResponse, error) {goCover_3df292486a63__5[0] = 3 ; goCover_3df292486a63__5[1] = goCover_3df292486a63_P ; goCover_3df292486a63__5[2] = 5 ; goCover_3df292486a63__5[3] = 1;
+	if err := s.uc.SendOTP(ctx, req.GetPhone()); err != nil {goCover_3df292486a63__5[5] = 1;
+		return nil, err
+	}
+	goCover_3df292486a63__5[4] = 1;return &authv1.SendOTPResponse{Sent: true, TtlSeconds: 300}, nil
+}
+
+func (s *Server) VerifyOTP(ctx context.Context, req *authv1.VerifyOTPRequest) (*authv1.VerifyOTPResponse, error) {goCover_3df292486a63__6[0] = 3 ; goCover_3df292486a63__6[1] = goCover_3df292486a63_P ; goCover_3df292486a63__6[2] = 6 ; goCover_3df292486a63__6[3] = 1;
+	ok, err := s.uc.VerifyOTP(ctx, req.GetPhone(), req.GetOtp())
+	if err != nil {goCover_3df292486a63__6[5] = 1;
+		return nil, err
+	}
+	goCover_3df292486a63__6[4] = 1;return &authv1.VerifyOTPResponse{Verified: ok}, nil
+}

@@ -1,0 +1,35 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\repository\redis\availability_repo.go:1:1
+package redisrepo
+
+import (
+	"context"
+
+	"github.com/redis/go-redis/v9"
+)
+
+type AvailabilityRepository struct {
+	rdb *redis.Client
+}
+
+func NewAvailabilityRepository(rdb *redis.Client) *AvailabilityRepository {goCover_544ad4a49858__0[0] = 1 ; goCover_544ad4a49858__0[1] = goCover_544ad4a49858_P ; goCover_544ad4a49858__0[2] = 0 ; goCover_544ad4a49858__0[3] = 1;
+	return &AvailabilityRepository{rdb: rdb}
+}
+
+func (r *AvailabilityRepository) SetAvailability(ctx context.Context, techID, status string) error {goCover_544ad4a49858__1[0] = 5 ; goCover_544ad4a49858__1[1] = goCover_544ad4a49858_P ; goCover_544ad4a49858__1[2] = 1 ; goCover_544ad4a49858__1[3] = 1;
+	key := "tech:availability:" + techID
+	if err := r.rdb.HSet(ctx, key, "status", status).Err(); err != nil {goCover_544ad4a49858__1[6] = 1;
+		return err
+	}
+	goCover_544ad4a49858__1[4] = 1;if status == "Online" {goCover_544ad4a49858__1[7] = 1;
+		return r.rdb.SAdd(ctx, "tech:online", techID).Err()
+	}
+	goCover_544ad4a49858__1[5] = 1;return r.rdb.SRem(ctx, "tech:online", techID).Err()
+}
+
+func (r *AvailabilityRepository) GetAvailability(ctx context.Context, techID string) (string, error) {goCover_544ad4a49858__2[0] = 1 ; goCover_544ad4a49858__2[1] = goCover_544ad4a49858_P ; goCover_544ad4a49858__2[2] = 2 ; goCover_544ad4a49858__2[3] = 1;
+	return r.rdb.HGet(ctx, "tech:availability:"+techID, "status").Result()
+}
+
+func (r *AvailabilityRepository) ListOnlineTechnicians(ctx context.Context) ([]string, error) {goCover_544ad4a49858__3[0] = 1 ; goCover_544ad4a49858__3[1] = goCover_544ad4a49858_P ; goCover_544ad4a49858__3[2] = 3 ; goCover_544ad4a49858__3[3] = 1;
+	return r.rdb.SMembers(ctx, "tech:online").Result()
+}

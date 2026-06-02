@@ -1,0 +1,81 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\cmd\seed\main.go:1:1
+package main; import _ "runtime/coverage"
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/google/uuid"
+	"github.com/yourname/fixflow-backend/internal/pkg/config"
+	"github.com/yourname/fixflow-backend/internal/pkg/database"
+)
+
+func main() {goCover_558654b69035__0[0] = 22 ; goCover_558654b69035__0[1] = goCover_558654b69035_P ; goCover_558654b69035__0[2] = 0 ; goCover_558654b69035__0[3] = 1;
+	ctx := context.Background()
+	cfg, err := config.Load()
+	if err != nil {goCover_558654b69035__0[10] = 1;
+		log.Fatal(err)
+	}
+	goCover_558654b69035__0[4] = 1;db, err := database.NewPostgres(ctx, cfg.PostgresURL)
+	if err != nil {goCover_558654b69035__0[11] = 1;
+		log.Fatal(err)
+	}
+	goCover_558654b69035__0[5] = 1;defer db.Close()
+
+	services := []string{"plumbing", "electrical", "carpentry", "painting"}
+	customerIDs := make([]string, 0, 5)
+	techIDs := make([]string, 0, 10)
+	supplierIDs := make([]string, 0, 3)
+
+	for i := 1; i <= 5; i++ {goCover_558654b69035__0[12] = 1;
+		uid := uuid.NewString()
+		_, err = db.Exec(ctx, `INSERT INTO users (id, full_name, email, phone, password_hash, role, is_verified) VALUES ($1,$2,$3,$4,$5,'customer',true) ON CONFLICT (email) DO NOTHING`, uid, fmt.Sprintf("Customer %d", i), fmt.Sprintf("customer%d@fixflow.dev", i), fmt.Sprintf("90000000%02d", i), "seed")
+		if err != nil {goCover_558654b69035__0[14] = 1;
+			log.Fatal(err)
+		}
+		goCover_558654b69035__0[13] = 1;customerIDs = append(customerIDs, uid)
+	}
+
+	goCover_558654b69035__0[6] = 1;for i := 1; i <= 10; i++ {goCover_558654b69035__0[15] = 1;
+		uid := uuid.NewString()
+		tid := uuid.NewString()
+		service := services[i%len(services)]
+		lat := 11.0 + float64(i)*0.01
+		lng := 76.1 + float64(i)*0.01
+		_, err = db.Exec(ctx, `INSERT INTO users (id, full_name, email, phone, password_hash, role, is_verified) VALUES ($1,$2,$3,$4,$5,'technician',true) ON CONFLICT (email) DO NOTHING`, uid, fmt.Sprintf("Technician %d", i), fmt.Sprintf("tech%d@fixflow.dev", i), fmt.Sprintf("91000000%02d", i), "seed")
+		if err != nil {goCover_558654b69035__0[18] = 1;
+			log.Fatal(err)
+		}
+		goCover_558654b69035__0[16] = 1;_, err = db.Exec(ctx, `INSERT INTO technicians (id, user_id, skills, years_experience, service_radius_km, current_location, is_available) VALUES ($1,$2,$3,3,15,ST_SetSRID(ST_MakePoint($4,$5),4326)::geography,true) ON CONFLICT (user_id) DO NOTHING`, tid, uid, []string{service}, lng, lat)
+		if err != nil {goCover_558654b69035__0[19] = 1;
+			log.Fatal(err)
+		}
+		goCover_558654b69035__0[17] = 1;techIDs = append(techIDs, tid)
+	}
+
+	goCover_558654b69035__0[7] = 1;for i := 1; i <= 3; i++ {goCover_558654b69035__0[20] = 1;
+		sid := uuid.NewString()
+		_, err = db.Exec(ctx, `INSERT INTO suppliers (id, name, email, phone, address) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (email) DO NOTHING`, sid, fmt.Sprintf("Supplier %d", i), fmt.Sprintf("supplier%d@fixflow.dev", i), fmt.Sprintf("92000000%02d", i), "Kozhikode, Kerala")
+		if err != nil {goCover_558654b69035__0[22] = 1;
+			log.Fatal(err)
+		}
+		goCover_558654b69035__0[21] = 1;supplierIDs = append(supplierIDs, sid)
+	}
+
+	goCover_558654b69035__0[8] = 1;statuses := []string{"created", "assigned", "in_progress", "completed", "cancelled"}
+	for i := 1; i <= 20; i++ {goCover_558654b69035__0[23] = 1;
+		jid := uuid.NewString()
+		customerID := customerIDs[i%len(customerIDs)]
+		techID := techIDs[i%len(techIDs)]
+		status := statuses[i%len(statuses)]
+		lat := 11.0 + float64(i)*0.005
+		lng := 76.1 + float64(i)*0.005
+		_, err = db.Exec(ctx, `INSERT INTO jobs (id, customer_id, technician_id, title, description, status, priority, address, location) VALUES ($1,$2,$3,$4,$5,$6,'normal',$7,ST_SetSRID(ST_MakePoint($8,$9),4326)::geography) ON CONFLICT (id) DO NOTHING`, jid, customerID, techID, fmt.Sprintf("Job %d", i), "Seeded job", status, "Kerala", lng, lat)
+		if err != nil {goCover_558654b69035__0[24] = 1;
+			log.Fatal(err)
+		}
+	}
+
+	goCover_558654b69035__0[9] = 1;fmt.Printf("seed complete: %d customers, %d technicians, %d suppliers, %d jobs\n", len(customerIDs), len(techIDs), len(supplierIDs), 20)
+}

@@ -1,0 +1,65 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\domain\job\entity.go:1:1
+package job
+
+import (
+	"fmt"
+	"time"
+)
+
+type JobStatus string
+
+const (
+	StatusRequested JobStatus = "Requested"
+	StatusAccepted  JobStatus = "Accepted"
+	StatusOnTheWay  JobStatus = "OnTheWay"
+	StatusArrived   JobStatus = "Arrived"
+	StatusWorking   JobStatus = "Working"
+	StatusCompleted JobStatus = "Completed"
+	StatusCancelled JobStatus = "Cancelled"
+)
+
+var ValidTransitions = map[JobStatus]map[JobStatus]bool{
+	StatusRequested: {StatusAccepted: true, StatusCancelled: true},
+	StatusAccepted:  {StatusOnTheWay: true, StatusCancelled: true},
+	StatusOnTheWay:  {StatusArrived: true, StatusCancelled: true},
+	StatusArrived:   {StatusWorking: true, StatusCancelled: true},
+	StatusWorking:   {StatusCompleted: true, StatusCancelled: true},
+	StatusCompleted: {},
+	StatusCancelled: {},
+}
+
+type Job struct {
+	ID          string
+	CustomerID  string
+	TechnicianID string
+	ServiceType string
+	Description string
+	Latitude    float64
+	Longitude   float64
+	Urgency     string
+	IsEmergency bool
+	Status      JobStatus
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+func CanTransition(from, to JobStatus) bool {goCover_0ffc8c95e3db__0[0] = 5 ; goCover_0ffc8c95e3db__0[1] = goCover_0ffc8c95e3db_P ; goCover_0ffc8c95e3db__0[2] = 0 ; goCover_0ffc8c95e3db__0[3] = 1;
+	if from == to {goCover_0ffc8c95e3db__0[6] = 1;
+		return true
+	}
+	goCover_0ffc8c95e3db__0[4] = 1;next, ok := ValidTransitions[from]
+	if !ok {goCover_0ffc8c95e3db__0[7] = 1;
+		return false
+	}
+	goCover_0ffc8c95e3db__0[5] = 1;return next[to]
+}
+
+func ParseStatus(s string) (JobStatus, error) {goCover_0ffc8c95e3db__1[0] = 3 ; goCover_0ffc8c95e3db__1[1] = goCover_0ffc8c95e3db_P ; goCover_0ffc8c95e3db__1[2] = 1 ; goCover_0ffc8c95e3db__1[3] = 1;
+	v := JobStatus(s)
+	switch v {
+	case StatusRequested, StatusAccepted, StatusOnTheWay, StatusArrived, StatusWorking, StatusCompleted, StatusCancelled:goCover_0ffc8c95e3db__1[4] = 1;
+		return v, nil
+	default:goCover_0ffc8c95e3db__1[5] = 1;
+		return "", fmt.Errorf("invalid status: %s", s)
+	}
+}

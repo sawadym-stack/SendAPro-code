@@ -1,0 +1,126 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\repository\postgres\job_repo.go:1:1
+package postgres
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/yourname/fixflow-backend/internal/domain/job"
+)
+
+type JobRepository struct {
+	db *pgxpool.Pool
+}
+
+func NewJobRepository(db *pgxpool.Pool) *JobRepository {goCover_935542e15cdb__0[0] = 1 ; goCover_935542e15cdb__0[1] = goCover_935542e15cdb_P ; goCover_935542e15cdb__0[2] = 0 ; goCover_935542e15cdb__0[3] = 1; return &JobRepository{db: db} }
+
+func (r *JobRepository) Create(ctx context.Context, j *job.Job) error {goCover_935542e15cdb__1[0] = 1 ; goCover_935542e15cdb__1[1] = goCover_935542e15cdb_P ; goCover_935542e15cdb__1[2] = 1 ; goCover_935542e15cdb__1[3] = 1;
+	q := `INSERT INTO jobs (customer_id, technician_id, title, description, status, priority, location, created_at, updated_at)
+VALUES ($1,NULL,$2,$3,$4,$5,ST_SetSRID(ST_MakePoint($6,$7),4326)::geography,NOW(),NOW()) RETURNING id, created_at, updated_at`
+	return r.db.QueryRow(ctx, q, j.CustomerID, j.ServiceType, j.Description, string(j.Status), j.Urgency, j.Longitude, j.Latitude).Scan(&j.ID, &j.CreatedAt, &j.UpdatedAt)
+}
+
+func (r *JobRepository) GetByID(ctx context.Context, id string) (*job.Job, error) {goCover_935542e15cdb__2[0] = 5 ; goCover_935542e15cdb__2[1] = goCover_935542e15cdb_P ; goCover_935542e15cdb__2[2] = 2 ; goCover_935542e15cdb__2[3] = 1;
+	q := `SELECT id, customer_id, COALESCE(technician_id::text,''), title, description,
+COALESCE(ST_Y(location::geometry),0), COALESCE(ST_X(location::geometry),0), priority, false, status, created_at, updated_at
+FROM jobs WHERE id = $1`
+	j := &job.Job{}
+	var status string
+	if err := r.db.QueryRow(ctx, q, id).Scan(&j.ID, &j.CustomerID, &j.TechnicianID, &j.ServiceType, &j.Description, &j.Latitude, &j.Longitude, &j.Urgency, &j.IsEmergency, &status, &j.CreatedAt, &j.UpdatedAt); err != nil {goCover_935542e15cdb__2[6] = 1;
+		return nil, err
+	}
+	goCover_935542e15cdb__2[4] = 1;parsed, err := job.ParseStatus(statusToDomain(status))
+	if err != nil {goCover_935542e15cdb__2[7] = 1;
+		return nil, err
+	}
+	goCover_935542e15cdb__2[5] = 1;j.Status = parsed
+	return j, nil
+}
+
+func (r *JobRepository) UpdateStatus(ctx context.Context, jobID string, status job.JobStatus, technicianID string) error {goCover_935542e15cdb__3[0] = 5 ; goCover_935542e15cdb__3[1] = goCover_935542e15cdb_P ; goCover_935542e15cdb__3[2] = 3 ; goCover_935542e15cdb__3[3] = 1;
+	statusDB := domainToDBStatus(status)
+	q := `UPDATE jobs SET status=$1, technician_id = NULLIF($2,'')::uuid, updated_at=NOW() WHERE id=$3`
+	ct, err := r.db.Exec(ctx, q, statusDB, technicianID, jobID)
+	if err != nil {goCover_935542e15cdb__3[6] = 1;
+		return err
+	}
+	goCover_935542e15cdb__3[4] = 1;if ct.RowsAffected() == 0 {goCover_935542e15cdb__3[7] = 1;
+		return fmt.Errorf("job not found")
+	}
+	goCover_935542e15cdb__3[5] = 1;return nil
+}
+
+func (r *JobRepository) ListByCustomer(ctx context.Context, customerID string, page, pageSize int32) ([]*job.Job, int32, error) {goCover_935542e15cdb__4[0] = 15 ; goCover_935542e15cdb__4[1] = goCover_935542e15cdb_P ; goCover_935542e15cdb__4[2] = 4 ; goCover_935542e15cdb__4[3] = 1;
+	if page < 1 {goCover_935542e15cdb__4[9] = 1; page = 1 }
+	goCover_935542e15cdb__4[4] = 1;if pageSize < 1 {goCover_935542e15cdb__4[10] = 1; pageSize = 10 }
+	goCover_935542e15cdb__4[5] = 1;offset := (page - 1) * pageSize
+
+	var total int32
+	if err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM jobs WHERE customer_id=$1`, customerID).Scan(&total); err != nil {goCover_935542e15cdb__4[11] = 1;
+		return nil, 0, err
+	}
+
+	goCover_935542e15cdb__4[6] = 1;q := `SELECT id, customer_id, COALESCE(technician_id::text,''), title, description,
+COALESCE(ST_Y(location::geometry),0), COALESCE(ST_X(location::geometry),0), priority, false, status, created_at, updated_at
+FROM jobs WHERE customer_id=$1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`
+	rows, err := r.db.Query(ctx, q, customerID, pageSize, offset)
+	if err != nil {goCover_935542e15cdb__4[12] = 1;
+		return nil, 0, err
+	}
+	goCover_935542e15cdb__4[7] = 1;defer rows.Close()
+
+	out := make([]*job.Job, 0)
+	for rows.Next() {goCover_935542e15cdb__4[13] = 1;
+		j := &job.Job{}
+		var status string
+		if err := rows.Scan(&j.ID, &j.CustomerID, &j.TechnicianID, &j.ServiceType, &j.Description, &j.Latitude, &j.Longitude, &j.Urgency, &j.IsEmergency, &status, &j.CreatedAt, &j.UpdatedAt); err != nil {goCover_935542e15cdb__4[16] = 1;
+			return nil, 0, err
+		}
+		goCover_935542e15cdb__4[14] = 1;parsed, err := job.ParseStatus(statusToDomain(status))
+		if err != nil {goCover_935542e15cdb__4[17] = 1;
+			return nil, 0, err
+		}
+		goCover_935542e15cdb__4[15] = 1;j.Status = parsed
+		out = append(out, j)
+	}
+	goCover_935542e15cdb__4[8] = 1;return out, total, nil
+}
+
+func domainToDBStatus(s job.JobStatus) string {goCover_935542e15cdb__5[0] = 9 ; goCover_935542e15cdb__5[1] = goCover_935542e15cdb_P ; goCover_935542e15cdb__5[2] = 5 ; goCover_935542e15cdb__5[3] = 1;
+	switch s {
+	case job.StatusRequested:goCover_935542e15cdb__5[4] = 1;
+		return "created"
+	case job.StatusAccepted:goCover_935542e15cdb__5[5] = 1;
+		return "assigned"
+	case job.StatusOnTheWay:goCover_935542e15cdb__5[6] = 1;
+		return "in_progress"
+	case job.StatusArrived:goCover_935542e15cdb__5[7] = 1;
+		return "in_progress"
+	case job.StatusWorking:goCover_935542e15cdb__5[8] = 1;
+		return "in_progress"
+	case job.StatusCompleted:goCover_935542e15cdb__5[9] = 1;
+		return "completed"
+	case job.StatusCancelled:goCover_935542e15cdb__5[10] = 1;
+		return "cancelled"
+	default:goCover_935542e15cdb__5[11] = 1;
+		return "created"
+	}
+}
+
+func statusToDomain(s string) string {goCover_935542e15cdb__6[0] = 7 ; goCover_935542e15cdb__6[1] = goCover_935542e15cdb_P ; goCover_935542e15cdb__6[2] = 6 ; goCover_935542e15cdb__6[3] = 1;
+	switch s {
+	case "created", "quoted":goCover_935542e15cdb__6[4] = 1;
+		return "Requested"
+	case "assigned":goCover_935542e15cdb__6[5] = 1;
+		return "Accepted"
+	case "in_progress":goCover_935542e15cdb__6[6] = 1;
+		return "Working"
+	case "completed":goCover_935542e15cdb__6[7] = 1;
+		return "Completed"
+	case "cancelled":goCover_935542e15cdb__6[8] = 1;
+		return "Cancelled"
+	default:goCover_935542e15cdb__6[9] = 1;
+		return "Requested"
+	}
+}

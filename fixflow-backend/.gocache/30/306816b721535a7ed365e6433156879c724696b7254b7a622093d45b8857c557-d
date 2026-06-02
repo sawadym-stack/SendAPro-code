@@ -1,0 +1,4 @@
+covervars.go
+job.pb.cover.go
+job.pb.gw.cover.go
+job_grpc.pb.cover.go

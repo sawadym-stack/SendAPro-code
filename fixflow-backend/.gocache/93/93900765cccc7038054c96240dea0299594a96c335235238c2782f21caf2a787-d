@@ -1,0 +1,62 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\delivery\http\handler\job_handler.go:1:1
+package handler
+
+import (
+	"strconv"
+
+	"github.com/gofiber/fiber/v2"
+	jobuc "github.com/yourname/fixflow-backend/internal/usecase/job"
+)
+
+type JobHandler struct{ uc jobuc.Usecase }
+
+func NewJobHandler(uc jobuc.Usecase) *JobHandler {goCover_c0f19746f7de__0[0] = 1 ; goCover_c0f19746f7de__0[1] = goCover_c0f19746f7de_P ; goCover_c0f19746f7de__0[2] = 0 ; goCover_c0f19746f7de__0[3] = 1; return &JobHandler{uc: uc} }
+
+func (h *JobHandler) Register(r fiber.Router) {goCover_c0f19746f7de__1[0] = 1 ; goCover_c0f19746f7de__1[1] = goCover_c0f19746f7de_P ; goCover_c0f19746f7de__1[2] = 1 ; goCover_c0f19746f7de__1[3] = 1;
+	r.Get("/jobs", h.ListCustomerJobs)
+	r.Post("/jobs", h.CreateJob)
+	r.Get("/jobs/:id", h.GetJob)
+	r.Patch("/jobs/:id/status", h.UpdateJobStatus)
+}
+
+func (h *JobHandler) CreateJob(c *fiber.Ctx) error {goCover_c0f19746f7de__2[0] = 5 ; goCover_c0f19746f7de__2[1] = goCover_c0f19746f7de_P ; goCover_c0f19746f7de__2[2] = 2 ; goCover_c0f19746f7de__2[3] = 1;
+	var req struct {
+		CustomerID string  `json:"customerId"`
+		ServiceType string `json:"serviceType"`
+		Description string `json:"description"`
+		Lat float64 `json:"lat"`
+		Lng float64 `json:"lng"`
+		Urgency string `json:"urgency"`
+		IsEmergency bool `json:"isEmergency"`
+	}
+	if err := c.BodyParser(&req); err != nil {goCover_c0f19746f7de__2[6] = 1; return err }
+	goCover_c0f19746f7de__2[4] = 1;j, err := h.uc.CreateJob(c.UserContext(), req.CustomerID, req.ServiceType, req.Description, req.Lat, req.Lng, req.Urgency, req.IsEmergency)
+	if err != nil {goCover_c0f19746f7de__2[7] = 1; return err }
+	goCover_c0f19746f7de__2[5] = 1;return c.Status(fiber.StatusCreated).JSON(j)
+}
+
+func (h *JobHandler) GetJob(c *fiber.Ctx) error {goCover_c0f19746f7de__3[0] = 3 ; goCover_c0f19746f7de__3[1] = goCover_c0f19746f7de_P ; goCover_c0f19746f7de__3[2] = 3 ; goCover_c0f19746f7de__3[3] = 1;
+	j, err := h.uc.GetJob(c.UserContext(), c.Params("id"))
+	if err != nil {goCover_c0f19746f7de__3[5] = 1; return err }
+	goCover_c0f19746f7de__3[4] = 1;return c.JSON(j)
+}
+
+func (h *JobHandler) UpdateJobStatus(c *fiber.Ctx) error {goCover_c0f19746f7de__4[0] = 5 ; goCover_c0f19746f7de__4[1] = goCover_c0f19746f7de_P ; goCover_c0f19746f7de__4[2] = 4 ; goCover_c0f19746f7de__4[3] = 1;
+	var req struct {
+		NewStatus string `json:"newStatus"`
+		TechnicianID string `json:"technicianId"`
+	}
+	if err := c.BodyParser(&req); err != nil {goCover_c0f19746f7de__4[6] = 1; return err }
+	goCover_c0f19746f7de__4[4] = 1;j, err := h.uc.UpdateJobStatus(c.UserContext(), c.Params("id"), req.NewStatus, req.TechnicianID)
+	if err != nil {goCover_c0f19746f7de__4[7] = 1; return err }
+	goCover_c0f19746f7de__4[5] = 1;return c.JSON(j)
+}
+
+func (h *JobHandler) ListCustomerJobs(c *fiber.Ctx) error {goCover_c0f19746f7de__5[0] = 3 ; goCover_c0f19746f7de__5[1] = goCover_c0f19746f7de_P ; goCover_c0f19746f7de__5[2] = 5 ; goCover_c0f19746f7de__5[3] = 1;
+	customerID := c.Query("customerId")
+	page, _ := strconv.Atoi(c.Query("page", "1"))
+	pageSize, _ := strconv.Atoi(c.Query("pageSize", "10"))
+	jobs, total, err := h.uc.ListCustomerJobs(c.UserContext(), customerID, int32(page), int32(pageSize))
+	if err != nil {goCover_c0f19746f7de__5[5] = 1; return err }
+	goCover_c0f19746f7de__5[4] = 1;return c.JSON(fiber.Map{"jobs": jobs, "total": total})
+}

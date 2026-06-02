@@ -1,0 +1,127 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\usecase\job\usecase_impl.go:1:1
+package job
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/yourname/fixflow-backend/internal/domain/job"
+)
+
+type Usecase interface {
+	CreateJob(ctx context.Context, customerID, serviceType, description string, lat, lng float64, urgency string, isEmergency bool) (*job.Job, error)
+	GetJob(ctx context.Context, jobID string) (*job.Job, error)
+	UpdateJobStatus(ctx context.Context, jobID, newStatus, technicianID string) (*job.Job, error)
+	ListCustomerJobs(ctx context.Context, customerID string, page, pageSize int32) ([]*job.Job, int32, error)
+	Subscribe(jobID string) (<-chan *job.Job, func())
+}
+
+type NotificationSender interface {
+	NotifyCustomer(ctx context.Context, customerID, title, message string) error
+}
+
+type usecase struct {
+	repo        job.Repository
+	notifier    NotificationSender
+	mu          sync.RWMutex
+	subscribers map[string][]chan *job.Job
+	stateCache  map[string]job.JobStatus
+}
+
+func NewUsecase(repo job.Repository, notifier NotificationSender) Usecase {goCover_b19c3b237734__0[0] = 1 ; goCover_b19c3b237734__0[1] = goCover_b19c3b237734_P ; goCover_b19c3b237734__0[2] = 0 ; goCover_b19c3b237734__0[3] = 1;
+	return &usecase{repo: repo, notifier: notifier, subscribers: map[string][]chan *job.Job{}, stateCache: map[string]job.JobStatus{}}
+}
+
+func (u *usecase) CreateJob(ctx context.Context, customerID, serviceType, description string, lat, lng float64, urgency string, isEmergency bool) (*job.Job, error) {goCover_b19c3b237734__1[0] = 3 ; goCover_b19c3b237734__1[1] = goCover_b19c3b237734_P ; goCover_b19c3b237734__1[2] = 1 ; goCover_b19c3b237734__1[3] = 1;
+	j := &job.Job{CustomerID: customerID, ServiceType: serviceType, Description: description, Latitude: lat, Longitude: lng, Urgency: urgency, IsEmergency: isEmergency, Status: job.StatusRequested}
+	if err := u.repo.Create(ctx, j); err != nil {goCover_b19c3b237734__1[5] = 1;
+		return nil, err
+	}
+	goCover_b19c3b237734__1[4] = 1;return j, nil
+}
+
+func (u *usecase) GetJob(ctx context.Context, jobID string) (*job.Job, error) {goCover_b19c3b237734__2[0] = 1 ; goCover_b19c3b237734__2[1] = goCover_b19c3b237734_P ; goCover_b19c3b237734__2[2] = 2 ; goCover_b19c3b237734__2[3] = 1;
+	return u.repo.GetByID(ctx, jobID)
+}
+
+func (u *usecase) UpdateJobStatus(ctx context.Context, jobID, newStatus, technicianID string) (*job.Job, error) {goCover_b19c3b237734__3[0] = 11 ; goCover_b19c3b237734__3[1] = goCover_b19c3b237734_P ; goCover_b19c3b237734__3[2] = 3 ; goCover_b19c3b237734__3[3] = 1;
+	j, err := u.repo.GetByID(ctx, jobID)
+	if err != nil {goCover_b19c3b237734__3[9] = 1;
+		return nil, err
+	}
+	goCover_b19c3b237734__3[4] = 1;next, err := job.ParseStatus(newStatus)
+	if err != nil {goCover_b19c3b237734__3[10] = 1;
+		return nil, err
+	}
+	goCover_b19c3b237734__3[5] = 1;current := j.Status
+	u.mu.RLock()
+	if cached, ok := u.stateCache[jobID]; ok {goCover_b19c3b237734__3[11] = 1;
+		current = cached
+	}
+	goCover_b19c3b237734__3[6] = 1;u.mu.RUnlock()
+	if !job.CanTransition(current, next) {goCover_b19c3b237734__3[12] = 1;
+		return nil, fmt.Errorf("invalid transition: %s -> %s", current, next)
+	}
+	goCover_b19c3b237734__3[7] = 1;if err := u.repo.UpdateStatus(ctx, jobID, next, technicianID); err != nil {goCover_b19c3b237734__3[13] = 1;
+		return nil, err
+	}
+	goCover_b19c3b237734__3[8] = 1;j.Status = next
+	j.TechnicianID = technicianID
+	j.UpdatedAt = time.Now()
+	u.mu.Lock()
+	u.stateCache[jobID] = next
+	u.mu.Unlock()
+	u.publish(jobID, j)
+	u.notifyStatusChange(ctx, j)
+	return j, nil
+}
+
+func (u *usecase) ListCustomerJobs(ctx context.Context, customerID string, page, pageSize int32) ([]*job.Job, int32, error) {goCover_b19c3b237734__4[0] = 1 ; goCover_b19c3b237734__4[1] = goCover_b19c3b237734_P ; goCover_b19c3b237734__4[2] = 4 ; goCover_b19c3b237734__4[3] = 1;
+	return u.repo.ListByCustomer(ctx, customerID, page, pageSize)
+}
+
+func (u *usecase) Subscribe(jobID string) (<-chan *job.Job, func()) {goCover_b19c3b237734__5[0] = 5 ; goCover_b19c3b237734__5[1] = goCover_b19c3b237734_P ; goCover_b19c3b237734__5[2] = 5 ; goCover_b19c3b237734__5[3] = 1;
+	ch := make(chan *job.Job, 8)
+	u.mu.Lock()
+	u.subscribers[jobID] = append(u.subscribers[jobID], ch)
+	u.mu.Unlock()
+	cancel := func() {goCover_b19c3b237734__5[5] = 1;
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		list := u.subscribers[jobID]
+		for i := range list {goCover_b19c3b237734__5[6] = 1;
+			if list[i] == ch {goCover_b19c3b237734__5[7] = 1;
+				u.subscribers[jobID] = append(list[:i], list[i+1:]...)
+				close(ch)
+				break
+			}
+		}
+	}
+	goCover_b19c3b237734__5[4] = 1;return ch, cancel
+}
+
+func (u *usecase) publish(jobID string, j *job.Job) {goCover_b19c3b237734__6[0] = 4 ; goCover_b19c3b237734__6[1] = goCover_b19c3b237734_P ; goCover_b19c3b237734__6[2] = 6 ; goCover_b19c3b237734__6[3] = 1;
+	u.mu.RLock()
+	list := append([]chan *job.Job(nil), u.subscribers[jobID]...)
+	u.mu.RUnlock()
+	for _, ch := range list {goCover_b19c3b237734__6[4] = 1;
+		select {
+		case ch <- j:goCover_b19c3b237734__6[5] = 1;
+		default:goCover_b19c3b237734__6[6] = 1;
+		}
+	}
+}
+
+func (u *usecase) notifyStatusChange(ctx context.Context, j *job.Job) {goCover_b19c3b237734__7[0] = 5 ; goCover_b19c3b237734__7[1] = goCover_b19c3b237734_P ; goCover_b19c3b237734__7[2] = 7 ; goCover_b19c3b237734__7[3] = 1;
+	if u.notifier == nil {goCover_b19c3b237734__7[5] = 1;
+		return
+	}
+	goCover_b19c3b237734__7[4] = 1;switch j.Status {
+	case job.StatusOnTheWay:goCover_b19c3b237734__7[6] = 1;
+		_ = u.notifier.NotifyCustomer(ctx, j.CustomerID, "Technician is on the way", "Your technician is heading to your location.")
+	case job.StatusCompleted:goCover_b19c3b237734__7[7] = 1;
+		_ = u.notifier.NotifyCustomer(ctx, j.CustomerID, "Job completed", "Your job has been marked as completed.")
+	}
+}

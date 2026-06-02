@@ -1,0 +1,246 @@
+syntax = "proto3";
+
+package supplier.v1;
+
+option go_package = "github.com/yourname/fixflow-backend/internal/adapter/grpc/pb/supplier/v1;supplierv1";
+
+service SupplierService {
+  // Supplier profiles
+  rpc RegisterSupplier(RegisterSupplierRequest) returns (RegisterSupplierResponse);
+  rpc GetProfile(GetProfileRequest) returns (GetProfileResponse);
+  rpc UpdateProfile(UpdateProfileRequest) returns (UpdateProfileResponse);
+  rpc GetNearbySuppliers(GetNearbySuppliersRequest) returns (GetNearbySuppliersResponse);
+
+  // Materials
+  rpc AddMaterial(AddMaterialRequest) returns (AddMaterialResponse);
+  rpc UpdateMaterial(UpdateMaterialRequest) returns (UpdateMaterialResponse);
+  rpc SoftDeleteMaterial(SoftDeleteMaterialRequest) returns (SoftDeleteMaterialResponse);
+  rpc ListMaterials(ListMaterialsRequest) returns (ListMaterialsResponse);
+  rpc UpdateStock(UpdateStockRequest) returns (UpdateStockResponse);
+  rpc BulkImportMaterials(BulkImportMaterialsRequest) returns (BulkImportMaterialsResponse);
+
+  // Quotations
+  rpc RequestQuotation(RequestQuotationRequest) returns (RequestQuotationResponse);
+  rpc RespondToQuotation(RespondToQuotationRequest) returns (RespondToQuotationResponse);
+  rpc CounterOffer(CounterOfferRequest) returns (CounterOfferResponse);
+  rpc AcceptQuotation(AcceptQuotationRequest) returns (AcceptQuotationResponse);
+  rpc RejectQuotation(RejectQuotationRequest) returns (RejectQuotationResponse);
+  rpc ListQuotations(ListQuotationsRequest) returns (ListQuotationsResponse);
+}
+
+message Supplier {
+  string id = 1;
+  string user_id = 2;
+  string business_name = 3;
+  string contact_phone = 4;
+  string contact_email = 5;
+  double lat = 6;
+  double lng = 7;
+  double service_radius_km = 8;
+  double rating = 9;
+  int32 review_count = 10;
+  bool is_verified = 11;
+  string created_at = 12;
+}
+
+message Material {
+  string id = 1;
+  string supplier_id = 2;
+  string name = 3;
+  string category = 4;
+  double price = 5;
+  int32 stock = 6;
+  bool is_available = 7;
+  string description = 8;
+  string image_url = 9;
+  bool is_deleted = 10;
+  string created_at = 11;
+  string updated_at = 12;
+}
+
+message Quotation {
+  string id = 1;
+  string material_id = 2;
+  string material_name = 3;
+  string job_id = 4;
+  string requester_id = 5;
+  string supplier_id = 6;
+  string status = 7;
+  int32 requested_qty = 8;
+  string notes = 9;
+  double offered_price = 10;
+  double counter_price = 11;
+  int32 available_qty = 12;
+  string delivery_date = 13;
+  string expires_at = 14;
+  string requested_at = 15;
+  string responded_at = 16;
+}
+
+// Request/Response structures
+
+message RegisterSupplierRequest {
+  string business_name = 1;
+  string contact_phone = 2;
+  string contact_email = 3;
+  double lat = 4;
+  double lng = 5;
+  double service_radius_km = 6;
+}
+message RegisterSupplierResponse {
+  Supplier supplier = 1;
+}
+
+message GetProfileRequest {
+  string supplier_id = 1; // optional
+  string user_id = 2;      // optional
+}
+message GetProfileResponse {
+  Supplier supplier = 1;
+}
+
+message UpdateProfileRequest {
+  string business_name = 1;
+  string contact_phone = 2;
+  string contact_email = 3;
+  double lat = 4;
+  double lng = 5;
+  double service_radius_km = 6;
+}
+message UpdateProfileResponse {
+  Supplier supplier = 1;
+}
+
+message GetNearbySuppliersRequest {
+  double lat = 1;
+  double lng = 2;
+  double radius_km = 3;
+  string category = 4; // optional
+}
+message GetNearbySuppliersResponse {
+  repeated Supplier suppliers = 1;
+}
+
+message AddMaterialRequest {
+  string name = 1;
+  string category = 2;
+  double price = 3;
+  int32 stock = 4;
+  string description = 5;
+  string image_url = 6;
+  bool is_available = 7;
+}
+message AddMaterialResponse {
+  Material material = 1;
+}
+
+message UpdateMaterialRequest {
+  string material_id = 1;
+  string name = 2;
+  string category = 3;
+  double price = 4;
+  int32 stock = 5;
+  string description = 6;
+  string image_url = 7;
+  bool is_available = 8;
+}
+message UpdateMaterialResponse {
+  Material material = 1;
+}
+
+message SoftDeleteMaterialRequest {
+  string material_id = 1;
+}
+message SoftDeleteMaterialResponse {
+  bool success = 1;
+}
+
+message ListMaterialsRequest {
+  string supplier_id = 1;
+  string category = 2; // optional
+  int32 page = 3;
+  int32 limit = 4;
+}
+message ListMaterialsResponse {
+  repeated Material materials = 1;
+  int32 total_count = 2;
+}
+
+message UpdateStockRequest {
+  string material_id = 1;
+  int32 delta = 2;
+}
+message UpdateStockResponse {
+  int32 new_stock = 1;
+}
+
+message MaterialImportItem {
+  string name = 1;
+  string category = 2;
+  double price = 3;
+  int32 stock = 4;
+  string description = 5;
+  string image_url = 6;
+}
+message BulkImportMaterialsRequest {
+  repeated MaterialImportItem materials = 1;
+}
+message BulkImportMaterialsResponse {
+  int32 imported_count = 1;
+  int32 failed_count = 2;
+  repeated string errors = 3;
+}
+
+message RequestQuotationRequest {
+  string material_id = 1;
+  string job_id = 2; // optional
+  int32 requested_qty = 3;
+  string notes = 4; // optional
+}
+message RequestQuotationResponse {
+  Quotation quotation = 1;
+}
+
+message RespondToQuotationRequest {
+  string quotation_id = 1;
+  double price = 2;
+  int32 qty = 3;
+  string delivery_date = 4; // optional
+}
+message RespondToQuotationResponse {
+  Quotation quotation = 1;
+}
+
+message CounterOfferRequest {
+  string quotation_id = 1;
+  double counter_price = 2;
+}
+message CounterOfferResponse {
+  Quotation quotation = 1;
+}
+
+message AcceptQuotationRequest {
+  string quotation_id = 1;
+}
+message AcceptQuotationResponse {
+  Quotation quotation = 1;
+}
+
+message RejectQuotationRequest {
+  string quotation_id = 1;
+}
+message RejectQuotationResponse {
+  bool success = 1;
+}
+
+message ListQuotationsRequest {
+  string supplier_id = 1;  // optional
+  string requester_id = 2; // optional
+  string status = 3;       // optional
+  int32 limit = 4;
+  int32 offset = 5;
+}
+message ListQuotationsResponse {
+  repeated Quotation quotations = 1;
+  int32 total_count = 2;
+}

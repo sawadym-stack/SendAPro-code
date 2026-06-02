@@ -1,0 +1,46 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\infrastructure\firebase\fcm.go:1:1
+package firebase
+
+import (
+	"context"
+	"fmt"
+
+	firebase "firebase.google.com/go/v4"
+	"firebase.google.com/go/v4/messaging"
+	"google.golang.org/api/option"
+)
+
+type FCMClient struct {
+	msg *messaging.Client
+}
+
+func NewFCMClient(ctx context.Context, credentialsFile string) (*FCMClient, error) {goCover_e3d9f846c43c__0[0] = 5 ; goCover_e3d9f846c43c__0[1] = goCover_e3d9f846c43c_P ; goCover_e3d9f846c43c__0[2] = 0 ; goCover_e3d9f846c43c__0[3] = 1;
+	app, err := firebase.NewApp(ctx, nil, option.WithCredentialsFile(credentialsFile))
+	if err != nil {goCover_e3d9f846c43c__0[6] = 1;
+		return nil, fmt.Errorf("firebase app init: %w", err)
+	}
+	goCover_e3d9f846c43c__0[4] = 1;msg, err := app.Messaging(ctx)
+	if err != nil {goCover_e3d9f846c43c__0[7] = 1;
+		return nil, fmt.Errorf("firebase messaging init: %w", err)
+	}
+	goCover_e3d9f846c43c__0[5] = 1;return &FCMClient{msg: msg}, nil
+}
+
+func (c *FCMClient) SendPush(ctx context.Context, token, title, body string, data map[string]string) (string, error) {goCover_e3d9f846c43c__1[0] = 3 ; goCover_e3d9f846c43c__1[1] = goCover_e3d9f846c43c_P ; goCover_e3d9f846c43c__1[2] = 1 ; goCover_e3d9f846c43c__1[3] = 1;
+	resp, err := c.msg.Send(ctx, &messaging.Message{Token: token, Notification: &messaging.Notification{Title: title, Body: body}, Data: data})
+	if err != nil {goCover_e3d9f846c43c__1[5] = 1;
+		return "", err
+	}
+	goCover_e3d9f846c43c__1[4] = 1;return resp, nil
+}
+
+func (c *FCMClient) SendPushBatch(ctx context.Context, tokens []string, title, body string, data map[string]string) (*messaging.BatchResponse, error) {goCover_e3d9f846c43c__2[0] = 5 ; goCover_e3d9f846c43c__2[1] = goCover_e3d9f846c43c_P ; goCover_e3d9f846c43c__2[2] = 2 ; goCover_e3d9f846c43c__2[3] = 1;
+	if len(tokens) == 0 {goCover_e3d9f846c43c__2[6] = 1;
+		return &messaging.BatchResponse{}, nil
+	}
+	goCover_e3d9f846c43c__2[4] = 1;messages := make([]*messaging.Message, 0, len(tokens))
+	for _, token := range tokens {goCover_e3d9f846c43c__2[7] = 1;
+		messages = append(messages, &messaging.Message{Token: token, Notification: &messaging.Notification{Title: title, Body: body}, Data: data})
+	}
+	goCover_e3d9f846c43c__2[5] = 1;return c.msg.SendEach(ctx, messages)
+}

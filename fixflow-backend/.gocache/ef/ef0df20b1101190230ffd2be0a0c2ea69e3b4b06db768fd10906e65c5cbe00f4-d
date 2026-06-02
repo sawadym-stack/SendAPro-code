@@ -1,0 +1,111 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\repository\redis\geo_repo.go:1:1
+package redisrepo
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
+)
+
+type TechnicianLocation struct {
+	TechnicianID string
+	Latitude     float64
+	Longitude    float64
+	DistanceKm   float64
+}
+
+type GeoRepository struct {
+	rdb *redis.Client
+	db  *pgxpool.Pool
+}
+
+func NewGeoRepository(rdb *redis.Client, db *pgxpool.Pool) *GeoRepository {goCover_544ad4a49858__4[0] = 1 ; goCover_544ad4a49858__4[1] = goCover_544ad4a49858_P ; goCover_544ad4a49858__4[2] = 4 ; goCover_544ad4a49858__4[3] = 1;
+	return &GeoRepository{rdb: rdb, db: db}
+}
+
+func (r *GeoRepository) UpdateLocation(ctx context.Context, techID string, lat, lng float64) error {goCover_544ad4a49858__5[0] = 3 ; goCover_544ad4a49858__5[1] = goCover_544ad4a49858_P ; goCover_544ad4a49858__5[2] = 5 ; goCover_544ad4a49858__5[3] = 1;
+	if err := r.rdb.GeoAdd(ctx, "technicians:geo", &redis.GeoLocation{Name: techID, Latitude: lat, Longitude: lng}).Err(); err != nil {goCover_544ad4a49858__5[5] = 1;
+		return err
+	}
+	goCover_544ad4a49858__5[4] = 1;return r.rdb.HSet(ctx, "tech:location:"+techID, "lat", fmt.Sprintf("%f", lat), "lng", fmt.Sprintf("%f", lng)).Err()
+}
+
+func (r *GeoRepository) NearbyTechnicians(ctx context.Context, lat, lng, radiusKm float64, serviceType string, limit int) ([]TechnicianLocation, error) {goCover_544ad4a49858__6[0] = 9 ; goCover_544ad4a49858__6[1] = goCover_544ad4a49858_P ; goCover_544ad4a49858__6[2] = 6 ; goCover_544ad4a49858__6[3] = 1;
+	results, err := r.rdb.GeoRadius(ctx, "technicians:geo", lng, lat, &redis.GeoRadiusQuery{
+		Radius:    radiusKm,
+		Unit:      "km",
+		Count:     limit,
+		Sort:      "ASC",
+		WithDist:  true,
+		WithCoord: true,
+	}).Result()
+	if err != nil {goCover_544ad4a49858__6[6] = 1;
+		return nil, err
+	}
+
+	goCover_544ad4a49858__6[4] = 1;out := make([]TechnicianLocation, 0, len(results))
+	for _, hit := range results {goCover_544ad4a49858__6[7] = 1;
+		if ok, err := r.isOnline(ctx, hit.Name); err != nil || !ok {goCover_544ad4a49858__6[10] = 1;
+			continue
+		}
+		goCover_544ad4a49858__6[8] = 1;if ok, err := r.isVerifiedAndMatchesService(ctx, hit.Name, serviceType); err != nil || !ok {goCover_544ad4a49858__6[11] = 1;
+			continue
+		}
+		goCover_544ad4a49858__6[9] = 1;out = append(out, TechnicianLocation{
+			TechnicianID: hit.Name,
+			Latitude:     hit.Latitude,
+			Longitude:    hit.Longitude,
+			DistanceKm:   hit.Dist,
+		})
+	}
+	goCover_544ad4a49858__6[5] = 1;return out, nil
+}
+
+func (r *GeoRepository) GetLocation(ctx context.Context, techID string) (lat, lng float64, err error) {goCover_544ad4a49858__7[0] = 9 ; goCover_544ad4a49858__7[1] = goCover_544ad4a49858_P ; goCover_544ad4a49858__7[2] = 7 ; goCover_544ad4a49858__7[3] = 1;
+	vals, err := r.rdb.HMGet(ctx, "tech:location:"+techID, "lat", "lng").Result()
+	if err != nil {goCover_544ad4a49858__7[8] = 1;
+		return 0, 0, err
+	}
+	goCover_544ad4a49858__7[4] = 1;if len(vals) != 2 || vals[0] == nil || vals[1] == nil {goCover_544ad4a49858__7[9] = 1;
+		return 0, 0, fmt.Errorf("location not found")
+	}
+	goCover_544ad4a49858__7[5] = 1;lat, err = strconv.ParseFloat(vals[0].(string), 64)
+	if err != nil {goCover_544ad4a49858__7[10] = 1;
+		return 0, 0, err
+	}
+	goCover_544ad4a49858__7[6] = 1;lng, err = strconv.ParseFloat(vals[1].(string), 64)
+	if err != nil {goCover_544ad4a49858__7[11] = 1;
+		return 0, 0, err
+	}
+	goCover_544ad4a49858__7[7] = 1;return lat, lng, nil
+}
+
+func (r *GeoRepository) isOnline(ctx context.Context, techID string) (bool, error) {goCover_544ad4a49858__8[0] = 5 ; goCover_544ad4a49858__8[1] = goCover_544ad4a49858_P ; goCover_544ad4a49858__8[2] = 8 ; goCover_544ad4a49858__8[3] = 1;
+	status, err := r.rdb.HGet(ctx, "tech:availability:"+techID, "status").Result()
+	if err != nil {goCover_544ad4a49858__8[5] = 1;
+		if err == redis.Nil {goCover_544ad4a49858__8[7] = 1;
+			return false, nil
+		}
+		goCover_544ad4a49858__8[6] = 1;return false, err
+	}
+	goCover_544ad4a49858__8[4] = 1;return status == "Online", nil
+}
+
+func (r *GeoRepository) isVerifiedAndMatchesService(ctx context.Context, techID, serviceType string) (bool, error) {goCover_544ad4a49858__9[0] = 5 ; goCover_544ad4a49858__9[1] = goCover_544ad4a49858_P ; goCover_544ad4a49858__9[2] = 9 ; goCover_544ad4a49858__9[3] = 1;
+	const q = `SELECT u.is_verified, COALESCE($2 = ANY(t.skills), false)
+FROM technicians t
+JOIN users u ON u.id = t.user_id
+WHERE t.id::text = $1 OR t.user_id::text = $1
+LIMIT 1`
+	var verified, hasSkill bool
+	if err := r.db.QueryRow(ctx, q, techID, serviceType).Scan(&verified, &hasSkill); err != nil {goCover_544ad4a49858__9[6] = 1;
+		return false, err
+	}
+	goCover_544ad4a49858__9[4] = 1;if serviceType == "" {goCover_544ad4a49858__9[7] = 1;
+		return verified, nil
+	}
+	goCover_544ad4a49858__9[5] = 1;return verified && hasSkill, nil
+}

@@ -1,0 +1,47 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fixflow-ingress
+  namespace: fixflow
+  annotations:
+    # NGINX ingress controller
+    kubernetes.io/ingress.class: nginx
+    # TLS via cert-manager
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # HTTP/2 for gRPC support
+    nginx.ingress.kubernetes.io/http2-push-preload: "true"
+    # WebSocket support
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    # Body size for file uploads
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+    # gRPC route annotation
+    nginx.ingress.kubernetes.io/backend-protocol: "GRPC"
+spec:
+  tls:
+    - hosts:
+        - api.fixflow.in
+        - app.fixflow.in
+      secretName: fixflow-tls
+  rules:
+    - host: api.fixflow.in
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: fixflow-backend-service
+                port:
+                  number: 8080
+    - host: app.fixflow.in
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: fixflow-frontend-service
+                port:
+                  number: 80

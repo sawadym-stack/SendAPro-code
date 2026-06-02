@@ -1,0 +1,65 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\repository\postgres\user_repo.go:1:1
+package postgres
+
+import (
+	"context"
+	"errors"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/yourname/fixflow-backend/internal/domain/user"
+)
+
+type UserRepository struct {
+	db *pgxpool.Pool
+}
+
+func NewUserRepository(db *pgxpool.Pool) *UserRepository {goCover_935542e15cdb__11[0] = 1 ; goCover_935542e15cdb__11[1] = goCover_935542e15cdb_P ; goCover_935542e15cdb__11[2] = 11 ; goCover_935542e15cdb__11[3] = 1;
+	return &UserRepository{db: db}
+}
+
+func (r *UserRepository) Create(ctx context.Context, u *user.User) error {goCover_935542e15cdb__12[0] = 1 ; goCover_935542e15cdb__12[1] = goCover_935542e15cdb_P ; goCover_935542e15cdb__12[2] = 12 ; goCover_935542e15cdb__12[3] = 1;
+	q := `INSERT INTO users (full_name, phone, email, password_hash, role, is_verified)
+	      VALUES ($1,$2,$3,$4,$5,$6)
+	      RETURNING id, created_at, updated_at`
+	return r.db.QueryRow(ctx, q, u.Name, u.Phone, u.Email, u.PasswordHash, string(u.Role), u.IsVerified).
+		Scan(&u.ID, &u.CreatedAt, &u.UpdatedAt)
+}
+
+func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*user.User, error) {goCover_935542e15cdb__13[0] = 5 ; goCover_935542e15cdb__13[1] = goCover_935542e15cdb_P ; goCover_935542e15cdb__13[2] = 13 ; goCover_935542e15cdb__13[3] = 1;
+	q := `SELECT id, full_name, phone, email, password_hash, role, is_verified, created_at, updated_at
+	      FROM users WHERE email = $1`
+
+	u := &user.User{}
+	err := r.db.QueryRow(ctx, q, email).Scan(
+		&u.ID, &u.Name, &u.Phone, &u.Email, &u.PasswordHash, &u.Role, &u.IsVerified, &u.CreatedAt, &u.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {goCover_935542e15cdb__13[6] = 1;
+		return nil, nil
+	}
+	goCover_935542e15cdb__13[4] = 1;if err != nil {goCover_935542e15cdb__13[7] = 1;
+		return nil, err
+	}
+	goCover_935542e15cdb__13[5] = 1;return u, nil
+}
+
+func (r *UserRepository) GetByPhone(ctx context.Context, phone string) (*user.User, error) {goCover_935542e15cdb__14[0] = 5 ; goCover_935542e15cdb__14[1] = goCover_935542e15cdb_P ; goCover_935542e15cdb__14[2] = 14 ; goCover_935542e15cdb__14[3] = 1;
+	q := `SELECT id, full_name, phone, email, password_hash, role, is_verified, created_at, updated_at
+	      FROM users WHERE phone = $1`
+	u := &user.User{}
+	err := r.db.QueryRow(ctx, q, phone).Scan(
+		&u.ID, &u.Name, &u.Phone, &u.Email, &u.PasswordHash, &u.Role, &u.IsVerified, &u.CreatedAt, &u.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {goCover_935542e15cdb__14[6] = 1;
+		return nil, nil
+	}
+	goCover_935542e15cdb__14[4] = 1;if err != nil {goCover_935542e15cdb__14[7] = 1;
+		return nil, err
+	}
+	goCover_935542e15cdb__14[5] = 1;return u, nil
+}
+
+func (r *UserRepository) UpdateVerificationByPhone(ctx context.Context, phone string, verified bool) error {goCover_935542e15cdb__15[0] = 1 ; goCover_935542e15cdb__15[1] = goCover_935542e15cdb_P ; goCover_935542e15cdb__15[2] = 15 ; goCover_935542e15cdb__15[3] = 1;
+	_, err := r.db.Exec(ctx, `UPDATE users SET is_verified = $1, updated_at = NOW() WHERE phone = $2`, verified, phone)
+	return err
+}

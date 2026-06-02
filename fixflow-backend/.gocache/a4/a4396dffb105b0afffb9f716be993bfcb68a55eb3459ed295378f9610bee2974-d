@@ -1,0 +1,59 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\pkg\token\jwt.go:1:1
+package token
+
+import (
+	"errors"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+)
+
+type Claims struct {
+	UserID string `json:"uid"`
+	Email  string `json:"email"`
+	Role   string `json:"role"`
+	Type   string `json:"type"`
+	jwt.RegisteredClaims
+}
+
+type Manager struct {
+	secret []byte
+}
+
+func NewManager(secret string) *Manager {goCover_c9e5e07fc30a__0[0] = 1 ; goCover_c9e5e07fc30a__0[1] = goCover_c9e5e07fc30a_P ; goCover_c9e5e07fc30a__0[2] = 0 ; goCover_c9e5e07fc30a__0[3] = 1;
+	return &Manager{secret: []byte(secret)}
+}
+
+func (m *Manager) Generate(userID, email, role, tokenType string, ttl time.Duration) (string, time.Time, error) {goCover_c9e5e07fc30a__1[0] = 1 ; goCover_c9e5e07fc30a__1[1] = goCover_c9e5e07fc30a_P ; goCover_c9e5e07fc30a__1[2] = 1 ; goCover_c9e5e07fc30a__1[3] = 1;
+	exp := time.Now().Add(ttl)
+	claims := Claims{
+		UserID: userID,
+		Email:  email,
+		Role:   role,
+		Type:   tokenType,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(exp),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	s, err := t.SignedString(m.secret)
+	return s, exp, err
+}
+
+func (m *Manager) Parse(token string) (*Claims, error) {goCover_c9e5e07fc30a__2[0] = 9 ; goCover_c9e5e07fc30a__2[1] = goCover_c9e5e07fc30a_P ; goCover_c9e5e07fc30a__2[2] = 2 ; goCover_c9e5e07fc30a__2[3] = 1;
+	parsed, err := jwt.ParseWithClaims(token, &Claims{}, func(t *jwt.Token) (interface{}, error) {goCover_c9e5e07fc30a__2[7] = 1;
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {goCover_c9e5e07fc30a__2[9] = 1;
+			return nil, errors.New("unexpected signing method")
+		}
+		goCover_c9e5e07fc30a__2[8] = 1;return m.secret, nil
+	})
+	goCover_c9e5e07fc30a__2[4] = 1;if err != nil {goCover_c9e5e07fc30a__2[10] = 1;
+		return nil, err
+	}
+	goCover_c9e5e07fc30a__2[5] = 1;claims, ok := parsed.Claims.(*Claims)
+	if !ok || !parsed.Valid {goCover_c9e5e07fc30a__2[11] = 1;
+		return nil, errors.New("invalid token")
+	}
+	goCover_c9e5e07fc30a__2[6] = 1;return claims, nil
+}

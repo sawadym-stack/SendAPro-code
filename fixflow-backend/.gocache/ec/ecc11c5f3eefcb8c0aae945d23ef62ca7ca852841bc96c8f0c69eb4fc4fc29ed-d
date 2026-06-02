@@ -1,0 +1,4 @@
+covervars.go
+notification.pb.cover.go
+notification.pb.gw.cover.go
+notification_grpc.pb.cover.go

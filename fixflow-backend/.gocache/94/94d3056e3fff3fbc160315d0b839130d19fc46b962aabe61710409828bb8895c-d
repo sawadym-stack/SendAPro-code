@@ -1,0 +1,12 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\pkg\database\postgres.go:1:1
+package database
+
+import (
+	"context"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+func NewPostgres(ctx context.Context, dsn string) (*pgxpool.Pool, error) {goCover_10a5861fe4e6__0[0] = 1 ; goCover_10a5861fe4e6__0[1] = goCover_10a5861fe4e6_P ; goCover_10a5861fe4e6__0[2] = 0 ; goCover_10a5861fe4e6__0[3] = 1;
+	return pgxpool.New(ctx, dsn)
+}

@@ -1,0 +1,3 @@
+covervars.go
+usecase_impl.cover.go
+./usecase_test.go

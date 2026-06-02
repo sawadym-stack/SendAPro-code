@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package job.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/yourname/fixflow-backend/internal/adapter/grpc/pb/job/v1;jobv1";
+
+service JobService {
+  rpc CreateJob(CreateJobRequest) returns (CreateJobResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/jobs"
+      body: "*"
+    };
+  }
+  rpc GetJob(GetJobRequest) returns (GetJobResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/jobs/{job_id}"
+    };
+  }
+  rpc UpdateJobStatus(UpdateJobStatusRequest) returns (UpdateJobStatusResponse) {
+    option (google.api.http) = {
+      patch: "/api/v1/jobs/{job_id}/status"
+      body: "*"
+    };
+  }
+  rpc ListCustomerJobs(ListCustomerJobsRequest) returns (ListCustomerJobsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/jobs"
+    };
+  }
+  rpc StreamJobUpdates(StreamJobUpdatesRequest) returns (stream JobUpdateEvent);
+}
+
+message Job {
+  string id = 1;
+  string customer_id = 2;
+  string technician_id = 3;
+  string service_type = 4;
+  string description = 5;
+  double latitude = 6;
+  double longitude = 7;
+  string urgency = 8;
+  bool is_emergency = 9;
+  string status = 10;
+  string created_at = 11;
+  string updated_at = 12;
+}
+
+message CreateJobRequest {
+  string customer_id = 1;
+  string service_type = 2;
+  string description = 3;
+  double lat = 4;
+  double lng = 5;
+  string urgency = 6;
+  bool is_emergency = 7;
+}
+message CreateJobResponse { Job job = 1; }
+
+message GetJobRequest { string job_id = 1; }
+message GetJobResponse { Job job = 1; }
+
+message UpdateJobStatusRequest {
+  string job_id = 1;
+  string new_status = 2;
+  string technician_id = 3;
+}
+message UpdateJobStatusResponse { Job job = 1; }
+
+message ListCustomerJobsRequest {
+  string customer_id = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+}
+message ListCustomerJobsResponse {
+  repeated Job jobs = 1;
+  int32 total = 2;
+}
+
+message StreamJobUpdatesRequest {
+  string job_id = 1;
+}
+
+message JobUpdateEvent {
+  string job_id = 1;
+  string status = 2;
+  string updated_at = 3;
+}

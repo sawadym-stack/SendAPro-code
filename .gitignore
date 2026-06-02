@@ -1,0 +1,11 @@
+.env
+.env.local
+*.env
+dist/
+node_modules/
+vendor/
+*.log
+.DS_Store
+coverage.out
+gen/          ← generated proto files (always regenerate)
+__pycache__/

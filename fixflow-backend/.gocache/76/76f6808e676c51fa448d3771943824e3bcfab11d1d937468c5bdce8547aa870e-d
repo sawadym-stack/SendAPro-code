@@ -1,0 +1,18 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\cmd\api\main.go:1:1
+package main; import _ "runtime/coverage"
+
+import (
+	"fmt"
+	"log"
+
+	"github.com/yourname/fixflow-backend/internal/pkg/config"
+)
+
+func main() {goCover_a25638b01a8e__0[0] = 3 ; goCover_a25638b01a8e__0[1] = goCover_a25638b01a8e_P ; goCover_a25638b01a8e__0[2] = 0 ; goCover_a25638b01a8e__0[3] = 1;
+	cfg, err := config.Load()
+	if err != nil {goCover_a25638b01a8e__0[5] = 1;
+		log.Fatalf("failed to load config: %v", err)
+	}
+
+	goCover_a25638b01a8e__0[4] = 1;fmt.Printf("fixflow-backend running on %s:%s\n", cfg.ServerHost, cfg.ServerPort)
+}

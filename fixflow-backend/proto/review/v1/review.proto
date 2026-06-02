@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package review.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/yourname/fixflow-backend/internal/adapter/grpc/pb/review/v1;reviewv1";
+
+service ReviewService {
+  rpc SubmitReview(SubmitReviewRequest) returns (SubmitReviewResponse) {
+    option (google.api.http) = {
+      post: "/v1/reviews"
+      body: "*"
+    };
+  }
+  rpc GetReviews(GetReviewsRequest) returns (GetReviewsResponse) {
+    option (google.api.http) = {
+      get: "/v1/technicians/{reviewee_id}/reviews"
+    };
+  }
+}
+
+message ReviewPB {
+  string id = 1;
+  string job_id = 2;
+  string reviewer_id = 3;
+  string reviewee_id = 4;
+  string reviewer_name = 5;
+  int32 rating = 6;
+  string comment = 7;
+  repeated string image_urls = 8;
+  string created_at = 9;
+}
+
+message SubmitReviewRequest {
+  string job_id = 1;
+  string reviewee_id = 2;
+  int32 rating = 3;
+  string comment = 4;
+  repeated string image_urls = 5;
+}
+
+message SubmitReviewResponse {
+  ReviewPB review = 1;
+}
+
+message GetReviewsRequest {
+  string reviewee_id = 1;
+  int32 page = 2;
+  int32 limit = 3;
+}
+
+message GetReviewsResponse {
+  repeated ReviewPB reviews = 1;
+  int32 total = 2;
+  double average_rating = 3;
+  int32 total_ratings = 4;
+}

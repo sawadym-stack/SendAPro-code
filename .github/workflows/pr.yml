@@ -1,0 +1,43 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    name: Lint, Type Check & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Install buf
+        run: |
+          curl -sSL \
+            "https://github.com/bufbuild/buf/releases/latest/download/buf-Linux-x86_64" \
+            -o /usr/local/bin/buf
+          chmod +x /usr/local/bin/buf
+
+      - name: Buf lint
+        working-directory: fixflow-backend
+        run: buf lint proto/
+
+      - name: Go test (no integration)
+        working-directory: fixflow-backend
+        run: go test ./... -short -timeout 60s
+
+      - name: Frontend type check
+        working-directory: fixflow-frontend
+        run: |
+          npm ci
+          npx tsc --noEmit
+
+      - name: Frontend lint
+        working-directory: fixflow-frontend
+        run: npm run lint

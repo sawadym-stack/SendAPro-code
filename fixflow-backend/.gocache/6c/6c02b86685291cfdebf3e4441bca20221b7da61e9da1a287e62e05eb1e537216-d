@@ -1,0 +1,73 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\pkg\config\config.go:1:1
+package config
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/spf13/viper"
+)
+
+// Config holds all runtime configuration loaded from env.
+type Config struct {
+	AppName         string `mapstructure:"APP_NAME"`
+	AppEnv          string `mapstructure:"APP_ENV"`
+	ServerHost      string `mapstructure:"SERVER_HOST"`
+	ServerPort      string `mapstructure:"SERVER_PORT"`
+	GRPCPort        string `mapstructure:"GRPC_PORT"`
+	LogLevel        string `mapstructure:"LOG_LEVEL"`
+	PostgresURL     string `mapstructure:"POSTGRES_URL"`
+	RedisAddr       string `mapstructure:"REDIS_ADDR"`
+	RedisPassword   string `mapstructure:"REDIS_PASSWORD"`
+	RedisDB         int    `mapstructure:"REDIS_DB"`
+	MinIOEndpoint   string `mapstructure:"MINIO_ENDPOINT"`
+	MinIOAccessKey  string `mapstructure:"MINIO_ACCESS_KEY"`
+	MinIOSecretKey  string `mapstructure:"MINIO_SECRET_KEY"`
+	MinIOBucket     string `mapstructure:"MINIO_BUCKET"`
+	MinIOUseSSL     bool   `mapstructure:"MINIO_USE_SSL"`
+	JWTSecret       string `mapstructure:"JWT_SECRET"`
+	JWTExpiryHours  int    `mapstructure:"JWT_EXPIRY_HOURS"`
+	JaegerEndpoint  string `mapstructure:"JAEGER_ENDPOINT"`
+	OTLPExporterURL string `mapstructure:"OTEL_EXPORTER_OTLP_ENDPOINT"`
+}
+
+func Load() (*Config, error) {goCover_71076b89df96__0[0] = 3 ; goCover_71076b89df96__0[1] = goCover_71076b89df96_P ; goCover_71076b89df96__0[2] = 0 ; goCover_71076b89df96__0[3] = 1;
+	v := viper.New()
+	v.SetConfigFile(".env")
+	v.SetConfigType("env")
+	v.AutomaticEnv()
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+
+	setDefaults(v)
+
+	_ = v.ReadInConfig()
+
+	var cfg Config
+	if err := v.Unmarshal(&cfg); err != nil {goCover_71076b89df96__0[5] = 1;
+		return nil, fmt.Errorf("unmarshal config: %w", err)
+	}
+
+	goCover_71076b89df96__0[4] = 1;return &cfg, nil
+}
+
+func setDefaults(v *viper.Viper) {goCover_71076b89df96__1[0] = 1 ; goCover_71076b89df96__1[1] = goCover_71076b89df96_P ; goCover_71076b89df96__1[2] = 1 ; goCover_71076b89df96__1[3] = 1;
+	v.SetDefault("APP_NAME", "fixflow-backend")
+	v.SetDefault("APP_ENV", "development")
+	v.SetDefault("SERVER_HOST", "0.0.0.0")
+	v.SetDefault("SERVER_PORT", "8080")
+	v.SetDefault("GRPC_PORT", "9090")
+	v.SetDefault("LOG_LEVEL", "debug")
+	v.SetDefault("POSTGRES_URL", "postgres://fixflow:fixflow@127.0.0.1:5433/fixflow?sslmode=disable")
+	v.SetDefault("REDIS_ADDR", "localhost:6379")
+	v.SetDefault("REDIS_PASSWORD", "")
+	v.SetDefault("REDIS_DB", 0)
+	v.SetDefault("MINIO_ENDPOINT", "localhost:9000")
+	v.SetDefault("MINIO_ACCESS_KEY", "minioadmin")
+	v.SetDefault("MINIO_SECRET_KEY", "minioadmin")
+	v.SetDefault("MINIO_BUCKET", "fixflow")
+	v.SetDefault("MINIO_USE_SSL", false)
+	v.SetDefault("JWT_SECRET", "change-me")
+	v.SetDefault("JWT_EXPIRY_HOURS", 24)
+	v.SetDefault("JAEGER_ENDPOINT", "http://localhost:16686")
+	v.SetDefault("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+}

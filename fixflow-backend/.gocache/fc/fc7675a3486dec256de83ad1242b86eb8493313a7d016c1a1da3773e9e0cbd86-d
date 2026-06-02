@@ -1,0 +1,4 @@
+covervars.go
+chat.pb.cover.go
+chat.pb.gw.cover.go
+chat_grpc.pb.cover.go

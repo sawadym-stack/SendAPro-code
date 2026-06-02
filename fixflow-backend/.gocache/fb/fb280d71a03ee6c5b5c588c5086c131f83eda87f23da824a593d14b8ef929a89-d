@@ -1,0 +1,31 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\middleware\grpc_rbac.go:1:1
+package middleware
+
+import (
+	"context"
+	"strings"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+func GRPCRBACInterceptor() grpc.UnaryServerInterceptor {goCover_47446dc6de83__5[0] = 6 ; goCover_47446dc6de83__5[1] = goCover_47446dc6de83_P ; goCover_47446dc6de83__5[2] = 5 ; goCover_47446dc6de83__5[3] = 1;
+	perm := map[string]map[string]bool{
+		"/job.v1.JobService/CreateJob":        {"customer": true, "admin": true},
+		"/job.v1.JobService/GetJob":           {"customer": true, "technician": true, "admin": true},
+		"/job.v1.JobService/ListCustomerJobs": {"customer": true, "admin": true},
+		"/job.v1.JobService/UpdateJobStatus":  {"technician": true, "admin": true},
+	}
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {goCover_47446dc6de83__5[4] = 1;
+		allowed, ok := perm[info.FullMethod]
+		if !ok {goCover_47446dc6de83__5[7] = 1;
+			return handler(ctx, req)
+		}
+		goCover_47446dc6de83__5[5] = 1;role := strings.ToLower(RoleFromContext(ctx))
+		if !allowed[role] {goCover_47446dc6de83__5[8] = 1;
+			return nil, status.Error(codes.PermissionDenied, "forbidden")
+		}
+		goCover_47446dc6de83__5[6] = 1;return handler(ctx, req)
+	}
+}

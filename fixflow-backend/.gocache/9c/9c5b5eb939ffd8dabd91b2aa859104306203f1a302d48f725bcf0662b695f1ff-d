@@ -1,0 +1,41 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\middleware\rbac.go:1:1
+package middleware
+
+import (
+	"strings"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/yourname/fixflow-backend/internal/pkg/token"
+)
+
+func FiberJWTAuth(tm *token.Manager) fiber.Handler {goCover_47446dc6de83__8[0] = 6 ; goCover_47446dc6de83__8[1] = goCover_47446dc6de83_P ; goCover_47446dc6de83__8[2] = 8 ; goCover_47446dc6de83__8[3] = 1;
+	return func(c *fiber.Ctx) error {goCover_47446dc6de83__8[4] = 1;
+		a := c.Get("Authorization")
+		parts := strings.SplitN(a, " ", 2)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {goCover_47446dc6de83__8[7] = 1;
+			return fiber.NewError(fiber.StatusUnauthorized, "missing bearer token")
+		}
+		goCover_47446dc6de83__8[5] = 1;claims, err := tm.Parse(parts[1])
+		if err != nil || claims.Type != "access" {goCover_47446dc6de83__8[8] = 1;
+			return fiber.NewError(fiber.StatusUnauthorized, "invalid token")
+		}
+		goCover_47446dc6de83__8[6] = 1;c.Locals("user_id", claims.UserID)
+		c.Locals("role", strings.ToLower(claims.Role))
+		return c.Next()
+	}
+}
+
+func RequireRoleFiber(allowed ...string) fiber.Handler {goCover_47446dc6de83__9[0] = 6 ; goCover_47446dc6de83__9[1] = goCover_47446dc6de83_P ; goCover_47446dc6de83__9[2] = 9 ; goCover_47446dc6de83__9[3] = 1;
+	set := map[string]bool{}
+	for _, r := range allowed {goCover_47446dc6de83__9[5] = 1;
+		set[strings.ToLower(r)] = true
+	}
+	goCover_47446dc6de83__9[4] = 1;return func(c *fiber.Ctx) error {goCover_47446dc6de83__9[6] = 1;
+		role, _ := c.Locals("role").(string)
+		role = strings.ToLower(role)
+		if !set[role] {goCover_47446dc6de83__9[8] = 1;
+			return fiber.NewError(fiber.StatusForbidden, "forbidden")
+		}
+		goCover_47446dc6de83__9[7] = 1;return c.Next()
+	}
+}

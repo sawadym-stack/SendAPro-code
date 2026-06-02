@@ -1,0 +1,218 @@
+version: '3.9'
+
+networks:
+  internal:          # backend services only
+    driver: bridge
+  public:            # services exposed externally
+    driver: bridge
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
+  grafanadata:
+  prometheusdata:
+
+services:
+
+  # ─── Database ───
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: fixflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fixflow
+      POSTGRES_USER: fixflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fixflow123}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fixflow -d fixflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"  # expose for local dev only
+
+  # ─── Cache & PubSub ───
+  redis:
+    image: redis:7-alpine
+    container_name: fixflow-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redisdata:/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    ports:
+      - "6379:6379"
+
+  # ─── Object Storage ───
+  minio:
+    image: minio/minio:latest
+    container_name: fixflow-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin123}
+    volumes:
+      - miniodata:/data
+    networks: [internal, public]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # Console UI
+
+  # ─── Backend ───
+  backend:
+    build:
+      context: ./fixflow-backend
+      dockerfile: Dockerfile
+    container_name: fixflow-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      # Database
+      DATABASE_URL: postgres://fixflow:${POSTGRES_PASSWORD:-fixflow123}@postgres:5432/fixflow?sslmode=disable
+      # Redis
+      REDIS_URL: redis:6379
+      # Server ports
+      HTTP_PORT: 8080
+      GRPC_PORT: 50051
+      # Auth
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-your-refresh-secret}
+      # MinIO
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin123}
+      MINIO_BUCKET: fixflow
+      MINIO_USE_SSL: "false"
+      # Razorpay
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET}
+      # Firebase
+      FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON}
+      # Observability
+      OTEL_EXPORTER_JAEGER_ENDPOINT: http://jaeger:14268/api/traces
+      OTEL_SERVICE_NAME: fixflow-backend
+      # Google Maps
+      GOOGLE_MAPS_KEY: ${GOOGLE_MAPS_KEY}
+      # Environment
+      APP_ENV: production
+      LOG_LEVEL: info
+    networks: [internal, public]
+    ports:
+      - "8080:8080"   # HTTP + grpc-gateway
+      - "50051:50051" # gRPC
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  # ─── Frontend ───
+  frontend:
+    build:
+      context: ./fixflow-frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:8080/api/v1
+        VITE_WS_URL: ws://localhost:8080
+        VITE_GOOGLE_MAPS_KEY: ${GOOGLE_MAPS_KEY}
+    container_name: fixflow-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [public]
+    ports:
+      - "3000:80"
+
+  # ─── Distributed Tracing ───
+  jaeger:
+    image: jaegertracing/all-in-one:1.56
+    container_name: fixflow-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    networks: [internal, public]
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # HTTP collector
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:16686/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ─── Metrics ───
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: fixflow-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheusdata:/prometheus
+    networks: [internal, public]
+    ports:
+      - "9090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ─── Dashboards ───
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: fixflow-grafana
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: http://localhost:3001
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    networks: [internal, public]
+    ports:
+      - "3001:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

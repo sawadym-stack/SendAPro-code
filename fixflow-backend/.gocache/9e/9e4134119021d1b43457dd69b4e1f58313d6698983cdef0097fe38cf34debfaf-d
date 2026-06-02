@@ -1,0 +1,4 @@
+covervars.go
+auth.pb.cover.go
+auth.pb.gw.cover.go
+auth_grpc.pb.cover.go

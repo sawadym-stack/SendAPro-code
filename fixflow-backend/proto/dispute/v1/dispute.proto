@@ -1,0 +1,102 @@
+syntax = "proto3";
+
+package dispute.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/yourname/fixflow-backend/internal/adapter/grpc/pb/dispute/v1;disputev1";
+
+service DisputeService {
+  rpc RaiseDispute(RaiseDisputeRequest) returns (RaiseDisputeResponse) {
+    option (google.api.http) = {
+      post: "/v1/disputes"
+      body: "*"
+    };
+  }
+  rpc UploadEvidence(UploadEvidenceRequest) returns (UploadEvidenceResponse) {
+    option (google.api.http) = {
+      post: "/v1/disputes/{dispute_id}/evidence"
+      body: "*"
+    };
+  }
+  rpc ResolveDispute(ResolveDisputeRequest) returns (ResolveDisputeResponse) {
+    option (google.api.http) = {
+      patch: "/v1/disputes/{dispute_id}/resolve"
+      body: "*"
+    };
+  }
+  rpc GetDisputes(GetDisputesRequest) returns (GetDisputesResponse) {
+    option (google.api.http) = {
+      get: "/v1/disputes"
+    };
+  }
+  rpc GetDispute(GetDisputeRequest) returns (GetDisputeResponse) {
+    option (google.api.http) = {
+      get: "/v1/disputes/{dispute_id}"
+    };
+  }
+}
+
+message DisputePB {
+  string id = 1;
+  string job_id = 2;
+  string raised_by_id = 3;
+  string raised_by_name = 4;
+  string against_id = 5;
+  string reason = 6;
+  string description = 7;
+  repeated string evidence_urls = 8;
+  string status = 9;
+  string admin_note = 10;
+  string action = 11;
+  string resolved_at = 12;
+  string created_at = 13;
+}
+
+message RaiseDisputeRequest {
+  string job_id = 1;
+  string reason = 2;
+  string description = 3;
+}
+
+message RaiseDisputeResponse {
+  DisputePB dispute = 1;
+}
+
+message UploadEvidenceRequest {
+  string dispute_id = 1;
+  string file_url = 2;
+}
+
+message UploadEvidenceResponse {
+  DisputePB dispute = 1;
+}
+
+message ResolveDisputeRequest {
+  string dispute_id = 1;
+  string action = 2;
+  string admin_note = 3;
+}
+
+message ResolveDisputeResponse {
+  DisputePB dispute = 1;
+}
+
+message GetDisputesRequest {
+  string status = 1;
+  int32 page = 2;
+  int32 limit = 3;
+}
+
+message GetDisputesResponse {
+  repeated DisputePB disputes = 1;
+  int32 total = 2;
+}
+
+message GetDisputeRequest {
+  string dispute_id = 1;
+}
+
+message GetDisputeResponse {
+  DisputePB dispute = 1;
+}

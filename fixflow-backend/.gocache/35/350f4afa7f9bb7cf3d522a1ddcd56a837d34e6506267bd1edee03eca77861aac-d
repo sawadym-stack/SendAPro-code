@@ -1,0 +1,25 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\domain\user\entity.go:1:1
+package user
+
+import "time"
+
+type Role string
+
+const (
+	RoleCustomer   Role = "customer"
+	RoleTechnician Role = "technician"
+	RoleSupplier   Role = "supplier"
+	RoleAdmin      Role = "admin"
+)
+
+type User struct {
+	ID           string
+	Name         string
+	Phone        string
+	Email        string
+	PasswordHash string
+	Role         Role
+	IsVerified   bool
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}

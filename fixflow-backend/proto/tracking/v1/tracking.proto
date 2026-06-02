@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package tracking.v1;
+
+option go_package = "github.com/yourname/fixflow-backend/internal/adapter/grpc/pb/tracking/v1;trackingv1";
+
+service TrackingService {
+  rpc LiveTracking(stream LiveTrackingMessage) returns (stream LiveTrackingMessage);
+  rpc StreamLocation(stream LocationUpdate) returns (stream LocationBroadcast);
+  rpc GetLatestLocation(GetLatestLocationRequest) returns (GetLatestLocationResponse);
+  rpc GetNearbyTechnicians(GetNearbyTechniciansRequest) returns (GetNearbyTechniciansResponse);
+}
+
+message LiveTrackingMessage {
+  oneof payload {
+    TrackingHandshake handshake = 1;
+    LocationUpdate location = 2;
+    LocationAck ack = 3;
+  }
+}
+
+message TrackingHandshake {
+  string job_id = 1;
+  string user_id = 2;
+  string role = 3;
+}
+
+message LocationUpdate {
+  string job_id = 1;
+  string technician_id = 2;
+  double lat = 3;
+  double lng = 4;
+  double heading = 5;
+  double speed_kmh = 6;
+  string recorded_at = 7;
+}
+
+message LocationAck {
+  string job_id = 1;
+  string message = 2;
+  string server_time = 3;
+}
+
+message LocationBroadcast {
+  double lat = 1;
+  double lng = 2;
+  int32 eta_minutes = 3;
+  float distance_km = 4;
+}
+
+message GetLatestLocationRequest { string job_id = 1; }
+message GetLatestLocationResponse {
+  string job_id = 1;
+  double latitude = 2;
+  double longitude = 3;
+  string recorded_at = 4;
+}
+
+message GetNearbyTechniciansRequest {
+  double lat = 1;
+  double lng = 2;
+  double radius_km = 3;
+  string service_type = 4;
+}
+
+message NearbyTechnician {
+  string technician_id = 1;
+  double lat = 2;
+  double lng = 3;
+  double distance_km = 4;
+}
+
+message GetNearbyTechniciansResponse {
+  repeated NearbyTechnician technicians = 1;
+}

@@ -1,0 +1,67 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\repository\postgres\notification_repo.go:1:1
+package postgres
+
+import (
+	"context"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type Notification struct {
+	ID        string
+	UserID    string
+	Title     string
+	Message   string
+	Type      string
+	IsRead    bool
+	CreatedAt time.Time
+}
+
+type NotificationRepository struct{ db *pgxpool.Pool }
+
+func NewNotificationRepository(db *pgxpool.Pool) *NotificationRepository {goCover_935542e15cdb__7[0] = 1 ; goCover_935542e15cdb__7[1] = goCover_935542e15cdb_P ; goCover_935542e15cdb__7[2] = 7 ; goCover_935542e15cdb__7[3] = 1;
+	return &NotificationRepository{db: db}
+}
+
+func (r *NotificationRepository) Create(ctx context.Context, userID, title, message, typ string) (*Notification, error) {goCover_935542e15cdb__8[0] = 3 ; goCover_935542e15cdb__8[1] = goCover_935542e15cdb_P ; goCover_935542e15cdb__8[2] = 8 ; goCover_935542e15cdb__8[3] = 1;
+	q := `INSERT INTO notifications (user_id, title, message, type, metadata, is_read, created_at) VALUES ($1,$2,$3,$4,'{}',false,NOW()) RETURNING id, user_id, title, message, type, is_read, created_at`
+	n := &Notification{}
+	if err := r.db.QueryRow(ctx, q, userID, title, message, typ).Scan(&n.ID, &n.UserID, &n.Title, &n.Message, &n.Type, &n.IsRead, &n.CreatedAt); err != nil {goCover_935542e15cdb__8[5] = 1;
+		return nil, err
+	}
+	goCover_935542e15cdb__8[4] = 1;return n, nil
+}
+
+func (r *NotificationRepository) MarkRead(ctx context.Context, notificationID, userID string) error {goCover_935542e15cdb__9[0] = 1 ; goCover_935542e15cdb__9[1] = goCover_935542e15cdb_P ; goCover_935542e15cdb__9[2] = 9 ; goCover_935542e15cdb__9[3] = 1;
+	_, err := r.db.Exec(ctx, `UPDATE notifications SET is_read=true, read_at=NOW() WHERE id=$1 AND user_id=$2`, notificationID, userID)
+	return err
+}
+
+func (r *NotificationRepository) ListByUser(ctx context.Context, userID string, page, pageSize int32) ([]*Notification, int32, error) {goCover_935542e15cdb__10[0] = 13 ; goCover_935542e15cdb__10[1] = goCover_935542e15cdb_P ; goCover_935542e15cdb__10[2] = 10 ; goCover_935542e15cdb__10[3] = 1;
+	if page < 1 {goCover_935542e15cdb__10[9] = 1;
+		page = 1
+	}
+	goCover_935542e15cdb__10[4] = 1;if pageSize < 1 {goCover_935542e15cdb__10[10] = 1;
+		pageSize = 10
+	}
+	goCover_935542e15cdb__10[5] = 1;offset := (page - 1) * pageSize
+	var unread int32
+	if err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM notifications WHERE user_id=$1 AND is_read=false`, userID).Scan(&unread); err != nil {goCover_935542e15cdb__10[11] = 1;
+		return nil, 0, err
+	}
+	goCover_935542e15cdb__10[6] = 1;rows, err := r.db.Query(ctx, `SELECT id, user_id, title, message, type, is_read, created_at FROM notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`, userID, pageSize, offset)
+	if err != nil {goCover_935542e15cdb__10[12] = 1;
+		return nil, 0, err
+	}
+	goCover_935542e15cdb__10[7] = 1;defer rows.Close()
+	out := make([]*Notification, 0)
+	for rows.Next() {goCover_935542e15cdb__10[13] = 1;
+		n := &Notification{}
+		if err := rows.Scan(&n.ID, &n.UserID, &n.Title, &n.Message, &n.Type, &n.IsRead, &n.CreatedAt); err != nil {goCover_935542e15cdb__10[15] = 1;
+			return nil, 0, err
+		}
+		goCover_935542e15cdb__10[14] = 1;out = append(out, n)
+	}
+	goCover_935542e15cdb__10[8] = 1;return out, unread, rows.Err()
+}

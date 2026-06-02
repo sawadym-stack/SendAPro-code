@@ -1,0 +1,113 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\cmd\server\main.go:1:1
+package main; import _ "runtime/coverage"
+
+import (
+	"context"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/gofiber/adaptor/v2"
+	"github.com/gofiber/fiber/v2"
+	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
+
+	gateway "github.com/yourname/fixflow-backend/infrastructure/gateway"
+	grpcserver "github.com/yourname/fixflow-backend/infrastructure/grpc"
+	jobhttp "github.com/yourname/fixflow-backend/internal/delivery/http/handler"
+	authgrpc "github.com/yourname/fixflow-backend/internal/grpc/auth"
+	jobgrpc "github.com/yourname/fixflow-backend/internal/grpc/job"
+	notificationgrpc "github.com/yourname/fixflow-backend/internal/grpc/notification"
+	"github.com/yourname/fixflow-backend/internal/middleware"
+	"github.com/yourname/fixflow-backend/internal/pkg/config"
+	"github.com/yourname/fixflow-backend/internal/pkg/database"
+	"github.com/yourname/fixflow-backend/internal/pkg/token"
+	userrepo "github.com/yourname/fixflow-backend/internal/repository/postgres"
+	redisrepo "github.com/yourname/fixflow-backend/internal/repository/redis"
+	authuc "github.com/yourname/fixflow-backend/internal/usecase/auth"
+	jobuc "github.com/yourname/fixflow-backend/internal/usecase/job"
+	matchinguc "github.com/yourname/fixflow-backend/internal/usecase/matching"
+	notificationuc "github.com/yourname/fixflow-backend/internal/usecase/notification"
+)
+
+func main() {goCover_72e9f36ff583__0[0] = 17 ; goCover_72e9f36ff583__0[1] = goCover_72e9f36ff583_P ; goCover_72e9f36ff583__0[2] = 0 ; goCover_72e9f36ff583__0[3] = 1;
+	ctx := context.Background()
+	cfg, err := config.Load()
+	if err != nil {goCover_72e9f36ff583__0[11] = 1;
+		log.Fatalf("load config: %v", err)
+	}
+
+	goCover_72e9f36ff583__0[4] = 1;logger, _ := zap.NewProduction()
+	defer logger.Sync()
+
+	db, err := database.NewPostgres(ctx, cfg.PostgresURL)
+	if err != nil {goCover_72e9f36ff583__0[12] = 1;
+		log.Fatalf("postgres: %v", err)
+	}
+	goCover_72e9f36ff583__0[5] = 1;defer db.Close()
+
+	rdb := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr, Password: cfg.RedisPassword, DB: cfg.RedisDB})
+	defer rdb.Close()
+
+	tm := token.NewManager(cfg.JWTSecret)
+	userRepository := userrepo.NewUserRepository(db)
+	jobRepository := userrepo.NewJobRepository(db)
+	notificationRepository := userrepo.NewNotificationRepository(db)
+	notificationUsecase := notificationuc.NewUsecase(notificationRepository, nil)
+	authUsecase := authuc.NewUsecase(userRepository, rdb, tm)
+	jobUsecase := jobuc.NewUsecase(jobRepository, notificationUsecase)
+	geoRepo := redisrepo.NewGeoRepository(rdb, db)
+	lockRepo := redisrepo.NewLockRepository(rdb)
+	matchingUsecase := matchinguc.NewUsecase(jobRepository, geoRepo, lockRepo, notificationUsecase)
+	authService := authgrpc.NewServer(authUsecase)
+	jobService := jobgrpc.NewServer(jobUsecase, matchingUsecase)
+	notificationService := notificationgrpc.NewServer(notificationUsecase)
+
+	rateLimiter := middleware.RateLimitInterceptor(rdb, 100, 100.0/60.0)
+	gs, err := grpcserver.New(":50051", logger, tm, authService, jobService, notificationService, rateLimiter)
+	if err != nil {goCover_72e9f36ff583__0[13] = 1;
+		log.Fatalf("grpc init: %v", err)
+	}
+	goCover_72e9f36ff583__0[6] = 1;go func() {goCover_72e9f36ff583__0[14] = 1;
+		if err := gs.Start(); err != nil {goCover_72e9f36ff583__0[15] = 1;
+			log.Fatalf("grpc serve: %v", err)
+		}
+	}()
+
+	goCover_72e9f36ff583__0[7] = 1;gw, err := gateway.NewMux(ctx, "localhost:50051")
+	if err != nil {goCover_72e9f36ff583__0[16] = 1;
+		log.Fatalf("gateway init: %v", err)
+	}
+
+	goCover_72e9f36ff583__0[8] = 1;app := fiber.New()
+	app.Get("/health", func(c *fiber.Ctx) error {goCover_72e9f36ff583__0[17] = 1;
+		return c.JSON(fiber.Map{"status": "ok"})
+	})
+	goCover_72e9f36ff583__0[9] = 1;app.All("/v1/*", adaptor.HTTPHandler(gw))
+
+	jobHandler := jobhttp.NewJobHandler(jobUsecase)
+	matchingHandler := jobhttp.NewMatchingHandler(matchingUsecase)
+	api := app.Group("/api/v1", middleware.FiberJWTAuth(tm))
+	api.Post("/jobs", middleware.RequireRoleFiber("customer", "admin"), jobHandler.CreateJob)
+	api.Get("/jobs", middleware.RequireRoleFiber("customer", "admin"), jobHandler.ListCustomerJobs)
+	api.Get("/jobs/:id", middleware.RequireRoleFiber("customer", "technician", "admin"), jobHandler.GetJob)
+	api.Patch("/jobs/:id/status", middleware.RequireRoleFiber("technician", "admin"), jobHandler.UpdateJobStatus)
+	api.Get("/technicians/nearby", middleware.RequireRoleFiber("customer", "admin"), matchingHandler.NearbyTechnicians)
+	api.Post("/jobs/:id/accept", middleware.RequireRoleFiber("technician", "admin"), matchingHandler.AcceptBooking)
+	api.Post("/jobs/:id/reject", middleware.RequireRoleFiber("technician", "admin"), matchingHandler.RejectBooking)
+	api.Post("/technicians/location", middleware.RequireRoleFiber("technician", "admin"), matchingHandler.UpdateTechnicianLocation)
+
+	go func() {goCover_72e9f36ff583__0[18] = 1;
+		if err := app.Listen(":8080"); err != nil {goCover_72e9f36ff583__0[19] = 1;
+			log.Fatalf("fiber listen: %v", err)
+		}
+	}()
+
+	goCover_72e9f36ff583__0[10] = 1;quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	gs.Stop()
+	_ = app.Shutdown()
+}

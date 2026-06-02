@@ -1,0 +1,76 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\delivery\http\handler\matching_handler.go:1:1
+package handler
+
+import (
+	"strconv"
+
+	"github.com/gofiber/fiber/v2"
+	matchinguc "github.com/yourname/fixflow-backend/internal/usecase/matching"
+)
+
+type MatchingHandler struct{ uc matchinguc.Usecase }
+
+func NewMatchingHandler(uc matchinguc.Usecase) *MatchingHandler {goCover_c0f19746f7de__6[0] = 1 ; goCover_c0f19746f7de__6[1] = goCover_c0f19746f7de_P ; goCover_c0f19746f7de__6[2] = 6 ; goCover_c0f19746f7de__6[3] = 1; return &MatchingHandler{uc: uc} }
+
+func (h *MatchingHandler) NearbyTechnicians(c *fiber.Ctx) error {goCover_c0f19746f7de__7[0] = 7 ; goCover_c0f19746f7de__7[1] = goCover_c0f19746f7de_P ; goCover_c0f19746f7de__7[2] = 7 ; goCover_c0f19746f7de__7[3] = 1;
+	lat, err := strconv.ParseFloat(c.Query("lat"), 64)
+	if err != nil {goCover_c0f19746f7de__7[7] = 1;
+		return fiber.NewError(fiber.StatusBadRequest, "invalid lat")
+	}
+	goCover_c0f19746f7de__7[4] = 1;lng, err := strconv.ParseFloat(c.Query("lng"), 64)
+	if err != nil {goCover_c0f19746f7de__7[8] = 1;
+		return fiber.NewError(fiber.StatusBadRequest, "invalid lng")
+	}
+	goCover_c0f19746f7de__7[5] = 1;radius, _ := strconv.ParseFloat(c.Query("radius", "10"), 64)
+	serviceType := c.Query("serviceType")
+	techs, err := h.uc.NearbyTechnicians(c.UserContext(), lat, lng, serviceType, radius, 20)
+	if err != nil {goCover_c0f19746f7de__7[9] = 1;
+		return err
+	}
+	goCover_c0f19746f7de__7[6] = 1;return c.JSON(fiber.Map{"technicians": techs})
+}
+
+func (h *MatchingHandler) AcceptBooking(c *fiber.Ctx) error {goCover_c0f19746f7de__8[0] = 7 ; goCover_c0f19746f7de__8[1] = goCover_c0f19746f7de_P ; goCover_c0f19746f7de__8[2] = 8 ; goCover_c0f19746f7de__8[3] = 1;
+	var req struct {
+		TechnicianID string `json:"technicianId"`
+	}
+	if err := c.BodyParser(&req); err != nil {goCover_c0f19746f7de__8[6] = 1;
+		return err
+	}
+	goCover_c0f19746f7de__8[4] = 1;j, err := h.uc.AcceptBooking(c.UserContext(), req.TechnicianID, c.Params("id"))
+	if err != nil {goCover_c0f19746f7de__8[7] = 1;
+		if err == matchinguc.ErrJobAlreadyBeingAccepted {goCover_c0f19746f7de__8[9] = 1;
+			return fiber.NewError(fiber.StatusConflict, err.Error())
+		}
+		goCover_c0f19746f7de__8[8] = 1;return err
+	}
+	goCover_c0f19746f7de__8[5] = 1;return c.JSON(j)
+}
+
+func (h *MatchingHandler) RejectBooking(c *fiber.Ctx) error {goCover_c0f19746f7de__9[0] = 5 ; goCover_c0f19746f7de__9[1] = goCover_c0f19746f7de_P ; goCover_c0f19746f7de__9[2] = 9 ; goCover_c0f19746f7de__9[3] = 1;
+	var req struct {
+		TechnicianID string `json:"technicianId"`
+	}
+	if err := c.BodyParser(&req); err != nil {goCover_c0f19746f7de__9[6] = 1;
+		return err
+	}
+	goCover_c0f19746f7de__9[4] = 1;if err := h.uc.RejectBooking(c.UserContext(), req.TechnicianID, c.Params("id")); err != nil {goCover_c0f19746f7de__9[7] = 1;
+		return err
+	}
+	goCover_c0f19746f7de__9[5] = 1;return c.JSON(fiber.Map{"success": true})
+}
+
+func (h *MatchingHandler) UpdateTechnicianLocation(c *fiber.Ctx) error {goCover_c0f19746f7de__10[0] = 5 ; goCover_c0f19746f7de__10[1] = goCover_c0f19746f7de_P ; goCover_c0f19746f7de__10[2] = 10 ; goCover_c0f19746f7de__10[3] = 1;
+	var req struct {
+		TechnicianID string  `json:"technicianId"`
+		Lat          float64 `json:"lat"`
+		Lng          float64 `json:"lng"`
+	}
+	if err := c.BodyParser(&req); err != nil {goCover_c0f19746f7de__10[6] = 1;
+		return err
+	}
+	goCover_c0f19746f7de__10[4] = 1;if err := h.uc.UpdateTechnicianLocation(c.UserContext(), req.TechnicianID, req.Lat, req.Lng); err != nil {goCover_c0f19746f7de__10[7] = 1;
+		return err
+	}
+	goCover_c0f19746f7de__10[5] = 1;return c.JSON(fiber.Map{"success": true})
+}

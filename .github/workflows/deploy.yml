@@ -1,0 +1,221 @@
+name: Deploy FixFlow
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/fixflow-backend
+  FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/fixflow-frontend
+
+jobs:
+  # ─── Job 1: Lint + Test ───
+  test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # needed for buf breaking check
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+          cache-dependency-path: fixflow-backend/go.sum
+
+      - name: Install buf CLI
+        run: |
+          curl -sSL \
+            "https://github.com/bufbuild/buf/releases/latest/download/buf-Linux-x86_64" \
+            -o /usr/local/bin/buf
+          chmod +x /usr/local/bin/buf
+
+      - name: Install protoc plugins
+        working-directory: fixflow-backend
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+          go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@latest
+
+      - name: Buf lint proto files
+        working-directory: fixflow-backend
+        run: buf lint proto/
+
+      - name: Buf breaking change check
+        working-directory: fixflow-backend
+        run: |
+          buf breaking proto/ \
+            --against ".git#branch=main,subdir=fixflow-backend/proto"
+        continue-on-error: true  # warn only on first run
+
+      - name: Generate gRPC stubs
+        working-directory: fixflow-backend
+        run: buf generate proto/
+
+      - name: Go vet
+        working-directory: fixflow-backend
+        run: go vet ./...
+
+      - name: Go test
+        working-directory: fixflow-backend
+        run: |
+          go test ./... \
+            -cover \
+            -coverprofile=coverage.out \
+            -timeout 120s \
+            -race
+        env:
+          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+          REDIS_URL: ${{ secrets.TEST_REDIS_URL }}
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: fixflow-backend/coverage.out
+
+      - name: Frontend lint
+        working-directory: fixflow-frontend
+        run: |
+          npm ci
+          npm run lint
+          npx tsc --noEmit
+
+  # ─── Job 2: Build & Push Docker images ───
+  build-push:
+    name: Build & Push
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      backend-tag: ${{ steps.meta-backend.outputs.tags }}
+      frontend-tag: ${{ steps.meta-frontend.outputs.tags }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Backend image metadata
+         # Using sha or tag
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.BACKEND_IMAGE }}
+          tags: |
+            type=sha,prefix=,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build & push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./fixflow-backend
+          file: ./fixflow-backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Frontend image metadata
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.FRONTEND_IMAGE }}
+          tags: |
+            type=sha,prefix=,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build & push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./fixflow-frontend
+          file: ./fixflow-frontend/Dockerfile
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+          build-args: |
+            VITE_API_URL=${{ secrets.VITE_API_URL }}
+            VITE_WS_URL=${{ secrets.VITE_WS_URL }}
+            VITE_GOOGLE_MAPS_KEY=${{ secrets.GOOGLE_MAPS_KEY }}
+
+  # ─── Job 3: Deploy to Kubernetes ───
+  deploy:
+    name: Deploy to Production
+    needs: build-push
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Get image SHA tag
+        id: image-tag
+        run: |
+          SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          echo "tag=$SHA" >> $GITHUB_OUTPUT
+
+      - name: Update backend image
+        run: |
+          kubectl set image deployment/fixflow-backend \
+            server=${{ env.BACKEND_IMAGE }}:${{ steps.image-tag.outputs.tag }} \
+            -n fixflow
+
+      - name: Update frontend image
+        run: |
+          kubectl set image deployment/fixflow-frontend \
+            nginx=${{ env.FRONTEND_IMAGE }}:${{ steps.image-tag.outputs.tag }} \
+            -n fixflow
+
+      - name: Wait for backend rollout
+        run: |
+          kubectl rollout status deployment/fixflow-backend \
+            -n fixflow \
+            --timeout=5m
+
+      - name: Wait for frontend rollout
+        run: |
+          kubectl rollout status deployment/fixflow-frontend \
+            -n fixflow \
+            --timeout=3m
+
+      - name: Verify deployment health
+        run: |
+          kubectl get pods -n fixflow
+          kubectl get hpa -n fixflow
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Deployment failed — rolling back"
+          kubectl rollout undo deployment/fixflow-backend -n fixflow
+          kubectl rollout undo deployment/fixflow-frontend -n fixflow

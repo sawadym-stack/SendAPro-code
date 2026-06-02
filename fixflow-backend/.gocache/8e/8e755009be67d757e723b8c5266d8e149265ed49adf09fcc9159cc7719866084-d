@@ -1,0 +1,75 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\grpc\notification\server.go:1:1
+package notification
+
+import (
+	"context"
+	"time"
+
+	notificationv1 "github.com/yourname/fixflow-backend/internal/adapter/grpc/pb/notification/v1"
+	repopg "github.com/yourname/fixflow-backend/internal/repository/postgres"
+	notuc "github.com/yourname/fixflow-backend/internal/usecase/notification"
+)
+
+type Server struct {
+	notificationv1.UnimplementedNotificationServiceServer
+	uc notuc.Usecase
+}
+
+func NewServer(uc notuc.Usecase) *Server {goCover_86cdae7564e9__0[0] = 1 ; goCover_86cdae7564e9__0[1] = goCover_86cdae7564e9_P ; goCover_86cdae7564e9__0[2] = 0 ; goCover_86cdae7564e9__0[3] = 1; return &Server{uc: uc} }
+
+func (s *Server) CreateNotification(ctx context.Context, req *notificationv1.CreateNotificationRequest) (*notificationv1.CreateNotificationResponse, error) {goCover_86cdae7564e9__1[0] = 3 ; goCover_86cdae7564e9__1[1] = goCover_86cdae7564e9_P ; goCover_86cdae7564e9__1[2] = 1 ; goCover_86cdae7564e9__1[3] = 1;
+	n, err := s.uc.Create(ctx, req.GetUserId(), req.GetTitle(), req.GetMessage(), req.GetType())
+	if err != nil {goCover_86cdae7564e9__1[5] = 1;
+		return nil, err
+	}
+	goCover_86cdae7564e9__1[4] = 1;return &notificationv1.CreateNotificationResponse{Notification: toPB(n)}, nil
+}
+
+func (s *Server) ListNotifications(ctx context.Context, req *notificationv1.ListNotificationsRequest) (*notificationv1.ListNotificationsResponse, error) {goCover_86cdae7564e9__2[0] = 5 ; goCover_86cdae7564e9__2[1] = goCover_86cdae7564e9_P ; goCover_86cdae7564e9__2[2] = 2 ; goCover_86cdae7564e9__2[3] = 1;
+	items, unread, err := s.uc.List(ctx, req.GetUserId(), req.GetPage(), req.GetPageSize())
+	if err != nil {goCover_86cdae7564e9__2[6] = 1;
+		return nil, err
+	}
+	goCover_86cdae7564e9__2[4] = 1;resp := &notificationv1.ListNotificationsResponse{UnreadCount: unread}
+	for _, it := range items {goCover_86cdae7564e9__2[7] = 1;
+		resp.Notifications = append(resp.Notifications, toPB(it))
+	}
+	goCover_86cdae7564e9__2[5] = 1;return resp, nil
+}
+
+func (s *Server) MarkNotificationRead(ctx context.Context, req *notificationv1.MarkNotificationReadRequest) (*notificationv1.MarkNotificationReadResponse, error) {goCover_86cdae7564e9__3[0] = 3 ; goCover_86cdae7564e9__3[1] = goCover_86cdae7564e9_P ; goCover_86cdae7564e9__3[2] = 3 ; goCover_86cdae7564e9__3[3] = 1;
+	if err := s.uc.MarkRead(ctx, req.GetNotificationId(), req.GetUserId()); err != nil {goCover_86cdae7564e9__3[5] = 1;
+		return nil, err
+	}
+	goCover_86cdae7564e9__3[4] = 1;return &notificationv1.MarkNotificationReadResponse{Success: true}, nil
+}
+
+func (s *Server) StreamNotifications(req *notificationv1.StreamNotificationsRequest, stream notificationv1.NotificationService_StreamNotificationsServer) error {goCover_86cdae7564e9__4[0] = 5 ; goCover_86cdae7564e9__4[1] = goCover_86cdae7564e9_P ; goCover_86cdae7564e9__4[2] = 4 ; goCover_86cdae7564e9__4[3] = 1;
+	ch, cancel := s.uc.Subscribe(req.GetUserId())
+	defer cancel()
+	for {goCover_86cdae7564e9__4[4] = 1;
+		select {
+		case <-stream.Context().Done():goCover_86cdae7564e9__4[5] = 1;
+			return nil
+		case n := <-ch:goCover_86cdae7564e9__4[6] = 1;
+			if err := stream.Send(&notificationv1.NotificationEvent{EventType: "created", Notification: toPB(n)}); err != nil {goCover_86cdae7564e9__4[7] = 1;
+				return err
+			}
+		}
+	}
+}
+
+func toPB(n *repopg.Notification) *notificationv1.Notification {goCover_86cdae7564e9__5[0] = 3 ; goCover_86cdae7564e9__5[1] = goCover_86cdae7564e9_P ; goCover_86cdae7564e9__5[2] = 5 ; goCover_86cdae7564e9__5[3] = 1;
+	if n == nil {goCover_86cdae7564e9__5[5] = 1;
+		return nil
+	}
+	goCover_86cdae7564e9__5[4] = 1;return &notificationv1.Notification{
+		Id:        n.ID,
+		UserId:    n.UserID,
+		Title:     n.Title,
+		Message:   n.Message,
+		Type:      n.Type,
+		IsRead:    n.IsRead,
+		CreatedAt: n.CreatedAt.Format(time.RFC3339),
+	}
+}

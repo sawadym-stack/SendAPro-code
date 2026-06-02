@@ -1,0 +1,26 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\pkg\utils\geo.go:1:1
+package utils
+
+import "math"
+
+const earthRadiusKm = 6371.0
+
+func Haversine(lat1, lng1, lat2, lng2 float64) float64 {goCover_ad9136f0380c__0[0] = 1 ; goCover_ad9136f0380c__0[1] = goCover_ad9136f0380c_P ; goCover_ad9136f0380c__0[2] = 0 ; goCover_ad9136f0380c__0[3] = 1;
+	dLat := degreesToRadians(lat2 - lat1)
+	dLng := degreesToRadians(lng2 - lng1)
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) + math.Cos(degreesToRadians(lat1))*math.Cos(degreesToRadians(lat2))*math.Sin(dLng/2)*math.Sin(dLng/2)
+	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+	return earthRadiusKm * c
+}
+
+func CalculateETA(distanceKm, speedKmh float64) int {goCover_ad9136f0380c__1[0] = 3 ; goCover_ad9136f0380c__1[1] = goCover_ad9136f0380c_P ; goCover_ad9136f0380c__1[2] = 1 ; goCover_ad9136f0380c__1[3] = 1;
+	if speedKmh <= 0 {goCover_ad9136f0380c__1[5] = 1;
+		return 0
+	}
+	goCover_ad9136f0380c__1[4] = 1;minutes := (distanceKm / speedKmh) * 60
+	return int(math.Ceil(minutes))
+}
+
+func degreesToRadians(d float64) float64 {goCover_ad9136f0380c__2[0] = 1 ; goCover_ad9136f0380c__2[1] = goCover_ad9136f0380c_P ; goCover_ad9136f0380c__2[2] = 2 ; goCover_ad9136f0380c__2[3] = 1;
+	return d * math.Pi / 180
+}

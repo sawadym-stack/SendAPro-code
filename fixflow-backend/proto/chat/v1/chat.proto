@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package chat.v1;
+
+option go_package = "github.com/yourname/fixflow-backend/internal/adapter/grpc/pb/chat/v1;chatv1";
+
+service ChatService {
+  rpc StreamMessages(stream ChatMessage) returns (stream ChatMessage);
+  rpc GetHistory(GetHistoryRequest) returns (GetHistoryResponse);
+  rpc CreateRoom(CreateRoomRequest) returns (CreateRoomResponse);
+  rpc MarkRead(MarkReadRequest) returns (MarkReadResponse);
+}
+
+message ChatMessage {
+  string id = 1;
+  string room_id = 2;
+  string sender_id = 3;
+  string sender_name = 4;
+  string type = 5;       // "text" | "voice" | "image"
+  string content = 6;    // text content or empty
+  string media_url = 7;  // S3 URL
+  int64 created_at = 8;  // unix timestamp
+  bool is_read = 9;
+}
+
+message GetHistoryRequest {
+  string room_id = 1;
+  int32 limit = 2;
+  string before_id = 3;
+}
+
+message GetHistoryResponse {
+  repeated ChatMessage messages = 1;
+}
+
+message CreateRoomRequest {
+  string job_id = 1;
+  string customer_id = 2;
+  string technician_id = 3;
+}
+
+message CreateRoomResponse {
+  string id = 1;
+  string job_id = 2;
+  string customer_id = 3;
+  string technician_id = 4;
+  int64 created_at = 5;
+}
+
+message MarkReadRequest {
+  string room_id = 1;
+  string user_id = 2;
+}
+
+message MarkReadResponse {
+  bool success = 1;
+}

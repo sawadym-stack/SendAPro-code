@@ -1,0 +1,25 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\repository\redis\lock_repo.go:1:1
+package redisrepo
+
+import (
+	"context"
+	"time"
+
+	"github.com/redis/go-redis/v9"
+)
+
+type LockRepository struct {
+	rdb *redis.Client
+}
+
+func NewLockRepository(rdb *redis.Client) *LockRepository {goCover_544ad4a49858__10[0] = 1 ; goCover_544ad4a49858__10[1] = goCover_544ad4a49858_P ; goCover_544ad4a49858__10[2] = 10 ; goCover_544ad4a49858__10[3] = 1;
+	return &LockRepository{rdb: rdb}
+}
+
+func (r *LockRepository) AcquireJobLock(ctx context.Context, jobID string) (bool, error) {goCover_544ad4a49858__11[0] = 1 ; goCover_544ad4a49858__11[1] = goCover_544ad4a49858_P ; goCover_544ad4a49858__11[2] = 11 ; goCover_544ad4a49858__11[3] = 1;
+	return r.rdb.SetNX(ctx, "job:lock:"+jobID, "1", 30*time.Second).Result()
+}
+
+func (r *LockRepository) ReleaseJobLock(ctx context.Context, jobID string) error {goCover_544ad4a49858__12[0] = 1 ; goCover_544ad4a49858__12[1] = goCover_544ad4a49858_P ; goCover_544ad4a49858__12[2] = 12 ; goCover_544ad4a49858__12[3] = 1;
+	return r.rdb.Del(ctx, "job:lock:"+jobID).Err()
+}

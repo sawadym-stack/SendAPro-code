@@ -1,0 +1,109 @@
+//line C:\Users\sawad\fixFlow\fixflow-backend\internal\usecase\matching\usecase_impl.go:1:1
+package matching
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	jobdomain "github.com/yourname/fixflow-backend/internal/domain/job"
+	redisrepo "github.com/yourname/fixflow-backend/internal/repository/redis"
+)
+
+var ErrJobAlreadyBeingAccepted = errors.New("job already being accepted")
+
+type NotificationSender interface {
+	NotifyCustomer(ctx context.Context, customerID, title, message string) error
+}
+
+type noopNotifier struct{}
+
+func (n noopNotifier) NotifyCustomer(_ context.Context, _, _, _ string) error {goCover_9625cc23c884__0[0] = 1 ; goCover_9625cc23c884__0[1] = goCover_9625cc23c884_P ; goCover_9625cc23c884__0[2] = 0 ; goCover_9625cc23c884__0[3] = 1; return nil }
+
+type Usecase interface {
+	NearbyTechnicians(ctx context.Context, customerLat, customerLng float64, serviceType string, radiusKm float64, limit int) ([]redisrepo.TechnicianLocation, error)
+	AcceptBooking(ctx context.Context, techID, jobID string) (*jobdomain.Job, error)
+	RejectBooking(ctx context.Context, techID, jobID string) error
+	UpdateTechnicianLocation(ctx context.Context, techID string, lat, lng float64) error
+}
+
+type usecase struct {
+	jobs     jobdomain.Repository
+	geo      GeoRepository
+	locks    LockRepository
+	notifier NotificationSender
+}
+
+type GeoRepository interface {
+	NearbyTechnicians(ctx context.Context, lat, lng, radiusKm float64, serviceType string, limit int) ([]redisrepo.TechnicianLocation, error)
+	UpdateLocation(ctx context.Context, techID string, lat, lng float64) error
+}
+
+type LockRepository interface {
+	AcquireJobLock(ctx context.Context, jobID string) (bool, error)
+	ReleaseJobLock(ctx context.Context, jobID string) error
+}
+
+func NewUsecase(jobs jobdomain.Repository, geo GeoRepository, locks LockRepository, notifier NotificationSender) Usecase {goCover_9625cc23c884__1[0] = 3 ; goCover_9625cc23c884__1[1] = goCover_9625cc23c884_P ; goCover_9625cc23c884__1[2] = 1 ; goCover_9625cc23c884__1[3] = 1;
+	if notifier == nil {goCover_9625cc23c884__1[5] = 1;
+		notifier = noopNotifier{}
+	}
+	goCover_9625cc23c884__1[4] = 1;return &usecase{jobs: jobs, geo: geo, locks: locks, notifier: notifier}
+}
+
+func (u *usecase) NearbyTechnicians(ctx context.Context, customerLat, customerLng float64, serviceType string, radiusKm float64, limit int) ([]redisrepo.TechnicianLocation, error) {goCover_9625cc23c884__2[0] = 5 ; goCover_9625cc23c884__2[1] = goCover_9625cc23c884_P ; goCover_9625cc23c884__2[2] = 2 ; goCover_9625cc23c884__2[3] = 1;
+	if radiusKm <= 0 {goCover_9625cc23c884__2[6] = 1;
+		radiusKm = 10
+	}
+	goCover_9625cc23c884__2[4] = 1;if limit <= 0 {goCover_9625cc23c884__2[7] = 1;
+		limit = 20
+	}
+	goCover_9625cc23c884__2[5] = 1;return u.geo.NearbyTechnicians(ctx, customerLat, customerLng, radiusKm, serviceType, limit)
+}
+
+func (u *usecase) AcceptBooking(ctx context.Context, techID, jobID string) (*jobdomain.Job, error) {goCover_9625cc23c884__3[0] = 17 ; goCover_9625cc23c884__3[1] = goCover_9625cc23c884_P ; goCover_9625cc23c884__3[2] = 3 ; goCover_9625cc23c884__3[3] = 1;
+	locked, err := u.locks.AcquireJobLock(ctx, jobID)
+	if err != nil {goCover_9625cc23c884__3[12] = 1;
+		return nil, err
+	}
+	goCover_9625cc23c884__3[4] = 1;if !locked {goCover_9625cc23c884__3[13] = 1;
+		return nil, ErrJobAlreadyBeingAccepted
+	}
+	goCover_9625cc23c884__3[5] = 1;defer func() {goCover_9625cc23c884__3[14] = 1; _ = u.locks.ReleaseJobLock(ctx, jobID) }()
+
+	goCover_9625cc23c884__3[6] = 1;j, err := u.jobs.GetByID(ctx, jobID)
+	if err != nil {goCover_9625cc23c884__3[15] = 1;
+		return nil, err
+	}
+	goCover_9625cc23c884__3[7] = 1;if j.Status == jobdomain.StatusAccepted && j.TechnicianID == techID {goCover_9625cc23c884__3[16] = 1;
+		return j, nil
+	}
+	goCover_9625cc23c884__3[8] = 1;if j.Status != jobdomain.StatusRequested {goCover_9625cc23c884__3[17] = 1;
+		return nil, fmt.Errorf("job is not in Requested state")
+	}
+
+	goCover_9625cc23c884__3[9] = 1;if err := u.jobs.UpdateStatus(ctx, jobID, jobdomain.StatusAccepted, techID); err != nil {goCover_9625cc23c884__3[18] = 1;
+		return nil, err
+	}
+	goCover_9625cc23c884__3[10] = 1;j.Status = jobdomain.StatusAccepted
+	j.TechnicianID = techID
+	if err := u.notifier.NotifyCustomer(ctx, j.CustomerID, "Booking Accepted", "A technician has accepted your booking."); err != nil {goCover_9625cc23c884__3[19] = 1;
+		return nil, err
+	}
+	goCover_9625cc23c884__3[11] = 1;return j, nil
+}
+
+func (u *usecase) RejectBooking(ctx context.Context, techID, jobID string) error {goCover_9625cc23c884__4[0] = 5 ; goCover_9625cc23c884__4[1] = goCover_9625cc23c884_P ; goCover_9625cc23c884__4[2] = 4 ; goCover_9625cc23c884__4[3] = 1;
+	j, err := u.jobs.GetByID(ctx, jobID)
+	if err != nil {goCover_9625cc23c884__4[6] = 1;
+		return err
+	}
+	goCover_9625cc23c884__4[4] = 1;if j.Status == jobdomain.StatusAccepted && j.TechnicianID == techID {goCover_9625cc23c884__4[7] = 1;
+		return fmt.Errorf("booking already accepted by this technician")
+	}
+	goCover_9625cc23c884__4[5] = 1;return nil
+}
+
+func (u *usecase) UpdateTechnicianLocation(ctx context.Context, techID string, lat, lng float64) error {goCover_9625cc23c884__5[0] = 1 ; goCover_9625cc23c884__5[1] = goCover_9625cc23c884_P ; goCover_9625cc23c884__5[2] = 5 ; goCover_9625cc23c884__5[3] = 1;
+	return u.geo.UpdateLocation(ctx, techID, lat, lng)
+}

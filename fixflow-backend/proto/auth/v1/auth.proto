@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+package auth.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/yourname/fixflow-backend/internal/adapter/grpc/pb/auth/v1;authv1";
+
+service AuthService {
+  rpc Register(RegisterRequest) returns (AuthTokensResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/register"
+      body: "*"
+    };
+  }
+  rpc Login(LoginRequest) returns (AuthTokensResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/login"
+      body: "*"
+    };
+  }
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/refresh"
+      body: "*"
+    };
+  }
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/validate"
+      body: "*"
+    };
+  }
+  rpc SendOTP(SendOTPRequest) returns (SendOTPResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/send-otp"
+      body: "*"
+    };
+  }
+  rpc VerifyOTP(VerifyOTPRequest) returns (VerifyOTPResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/verify-otp"
+      body: "*"
+    };
+  }
+}
+
+message RegisterRequest {
+  string name = 1;
+  string phone = 2;
+  string email = 3;
+  string password = 4;
+  string role = 5;
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message AuthTokensResponse {
+  string user_id = 1;
+  string access_token = 2;
+  string refresh_token = 3;
+  int64 access_expires_at_unix = 4;
+  int64 refresh_expires_at_unix = 5;
+}
+
+message RefreshTokenRequest { string refresh_token = 1; }
+
+message RefreshTokenResponse {
+  string access_token = 1;
+  int64 access_expires_at_unix = 2;
+}
+
+message ValidateTokenRequest { string token = 1; }
+
+message ValidateTokenResponse {
+  string user_id = 1;
+  string email = 2;
+  string role = 3;
+  int64 expires_at_unix = 4;
+  bool valid = 5;
+}
+
+message SendOTPRequest { string phone = 1; }
+
+message SendOTPResponse {
+  bool sent = 1;
+  int32 ttl_seconds = 2;
+}
+
+message VerifyOTPRequest {
+  string phone = 1;
+  string otp = 2;
+}
+
+message VerifyOTPResponse { bool verified = 1; }
