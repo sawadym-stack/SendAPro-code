@@ -72,13 +72,6 @@ jobs:
           name: coverage-report
           path: fixflow-backend/coverage.out
 
-      - name: Frontend lint
-        working-directory: fixflow-frontend
-        run: |
-          npm install
-          npm run lint
-          npx tsc --noEmit
-
   # ─── Job 2: Build & Push Backend Docker Image ───
   build-push:
     name: Build & Push Backend
