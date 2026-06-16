@@ -87,7 +87,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # Required if using AWS OIDC authentication
 
     steps:
       - name: Checkout
@@ -96,8 +95,6 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          # Note: If you configure OIDC, use role-to-assume instead of access keys.
-          # role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
@@ -122,57 +119,4 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64
 
-  # ─── Job 3: Deploy Backend to Amazon EKS ───
-  deploy:
-    name: Deploy Backend to EKS
-    needs: build-push
-    runs-on: ubuntu-latest
-    environment: production
-    permissions:
-      contents: read
-      id-token: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Setup kubectl
-        uses: azure/setup-kubectl@v3
-        with:
-          version: 'v1.28.0'
-
-      - name: Update kubeconfig for EKS
-        run: |
-          aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
-
-      - name: Update EKS Deployment Image
-        run: |
-          ECR_REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
-          kubectl set image deployment/sendapro-backend \
-            server=$ECR_REGISTRY/sendapro-backend:${{ github.sha }} \
-            -n sendapro
-
-      - name: Wait for backend rollout
-        run: |
-          kubectl rollout status deployment/sendapro-backend \
-            -n sendapro \
-            --timeout=5m
-
-      - name: Verify deployment health
-        run: |
-          kubectl get pods -n sendapro
-          kubectl get hpa -n sendapro
-
-      - name: Notify on failure
-        if: failure()
-        run: |
-          echo "Deployment failed — rolling back"
-          kubectl rollout undo deployment/sendapro-backend -n sendapro
 
