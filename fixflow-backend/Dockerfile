@@ -23,7 +23,8 @@ RUN go mod download
 
 # Generate gRPC stubs from proto files
 COPY proto/ proto/
-COPY buf.yaml buf.gen.yaml ./
+COPY buf.yaml buf.gen.yaml buf.lock ./
+RUN buf dep update
 RUN buf generate proto/
 
 # Copy all source
