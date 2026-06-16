@@ -54,12 +54,12 @@ jobs:
 
       - name: Go vet
         working-directory: fixflow-backend
-        run: go vet ./...
+        run: go vet ./cmd/... ./internal/... ./pkg/...
 
       - name: Go test
         working-directory: fixflow-backend
         run: |
-          go test ./... \
+          go test ./cmd/... ./internal/... ./pkg/... \
             -short \
             -cover \
             -coverprofile=coverage.out \
