@@ -1,0 +1,9 @@
+*.exe
+*.dll
+*.so
+*.dylib
+.git
+.gocache
+node_modules
+dist
+tmp
