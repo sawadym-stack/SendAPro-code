@@ -1,8 +1,8 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: fixflow-ingress
-  namespace: fixflow
+  name: sendapro-ingress
+  namespace: sendapro
   annotations:
     # Use AWS Application Load Balancer (ALB) Controller
     alb.ingress.kubernetes.io/scheme: internet-facing
@@ -26,13 +26,13 @@ metadata:
 spec:
   ingressClassName: alb
   rules:
-    - host: api.fixflow.in # Replace this with your backend subdomain (e.g., api.yourdomain.com)
+    - host: api.sendapro.online # Free subdomain of your sendapro.online domain
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: fixflow-backend-service
+                name: sendapro-backend-service
                 port:
                   number: 8080

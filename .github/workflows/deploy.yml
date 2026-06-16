@@ -1,4 +1,4 @@
-name: Deploy FixFlow
+name: Deploy SendAPro
 
 on:
   push:
@@ -116,8 +116,8 @@ jobs:
           file: ./fixflow-backend/Dockerfile
           push: true
           tags: |
-            ${{ steps.login-ecr.outputs.registry }}/fixflow-backend:${{ github.sha }}
-            ${{ steps.login-ecr.outputs.registry }}/fixflow-backend:latest
+            ${{ steps.login-ecr.outputs.registry }}/sendapro-backend:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/sendapro-backend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
@@ -155,24 +155,24 @@ jobs:
       - name: Update EKS Deployment Image
         run: |
           ECR_REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
-          kubectl set image deployment/fixflow-backend \
-            server=$ECR_REGISTRY/fixflow-backend:${{ github.sha }} \
-            -n fixflow
+          kubectl set image deployment/sendapro-backend \
+            server=$ECR_REGISTRY/sendapro-backend:${{ github.sha }} \
+            -n sendapro
 
       - name: Wait for backend rollout
         run: |
-          kubectl rollout status deployment/fixflow-backend \
-            -n fixflow \
+          kubectl rollout status deployment/sendapro-backend \
+            -n sendapro \
             --timeout=5m
 
       - name: Verify deployment health
         run: |
-          kubectl get pods -n fixflow
-          kubectl get hpa -n fixflow
+          kubectl get pods -n sendapro
+          kubectl get hpa -n sendapro
 
       - name: Notify on failure
         if: failure()
         run: |
           echo "Deployment failed — rolling back"
-          kubectl rollout undo deployment/fixflow-backend -n fixflow
+          kubectl rollout undo deployment/sendapro-backend -n sendapro
 
