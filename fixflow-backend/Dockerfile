@@ -1,5 +1,5 @@
 # ─── Stage 1: Proto generation + Build ───
-FROM golang:1.23-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install system deps
 RUN apk add --no-cache git curl wget unzip ca-certificates
