@@ -134,6 +134,27 @@ func (h *AuthHandler) VerifyOTP(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
+	// Check if technician/supplier needs approval
+	u, err := h.uc.GetByID(c.UserContext(), req.UserID)
+	if err == nil && u != nil {
+		role := string(u.Role)
+		if role == "technician" || role == "supplier" {
+			if u.ApprovalStatus == "pending" {
+				return c.JSON(fiber.Map{
+					"message":        fmt.Sprintf("%s registration pending admin approval", role),
+					"approvalStatus": "pending",
+					"role":           role,
+				})
+			} else if u.ApprovalStatus == "rejected" {
+				return c.JSON(fiber.Map{
+					"message":        fmt.Sprintf("%s registration was rejected by admin", role),
+					"approvalStatus": "rejected",
+					"role":           role,
+				})
+			}
+		}
+	}
+
 	return c.JSON(fiber.Map{
 		"accessToken":  accessToken,
 		"refreshToken": refreshToken,
@@ -466,8 +487,16 @@ func (h *AuthHandler) VerifyTechnician(c *fiber.Ctx) error {
 	}
 
 	adminID, _ := c.Locals("user_id").(string)
-	if adminID == "" {
-		adminID = "00000000-0000-0000-0000-000000000001" // Fallback admin UUID if context empty
+	var exists bool
+	if adminID != "" {
+		_ = h.db.QueryRow(c.UserContext(), "SELECT EXISTS(SELECT 1 FROM users WHERE id::text = $1 AND role = 'admin')", adminID).Scan(&exists)
+	}
+	if !exists {
+		// Fallback to a valid admin UUID from the database to prevent foreign key constraint violations
+		_ = h.db.QueryRow(c.UserContext(), "SELECT id::text FROM users WHERE role = 'admin' LIMIT 1").Scan(&adminID)
+		if adminID == "" {
+			adminID = "00000000-0000-0000-0000-000000000001"
+		}
 	}
 
 	if req.Approved {
@@ -486,3 +515,22 @@ func (h *AuthHandler) VerifyTechnician(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"message": "Registration rejected successfully."})
 	}
 }
+
+// GetMe - Fetch currently logged-in user profile details
+func (h *AuthHandler) GetMe(c *fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+	}
+
+	u, err := h.uc.GetByID(c.UserContext(), userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	if u == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "user not found"})
+	}
+
+	return c.JSON(u)
+}
+

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -76,12 +77,14 @@ func WSHandler(hub *Hub, jwtSecret string) fiber.Handler {
 			if err == nil && techID != "" {
 				location, err := hub.redis.HGetAll(ctx, "tech:location:"+techID).Result()
 				if err == nil && len(location) > 0 {
+					latVal, _ := strconv.ParseFloat(location["lat"], 64)
+					lngVal, _ := strconv.ParseFloat(location["lng"], 64)
 					event := WSEvent{
 						Type:   "location_update",
 						RoomID: room,
 						Payload: map[string]interface{}{
-							"lat":       location["lat"],
-							"lng":       location["lng"],
+							"lat":       latVal,
+							"lng":       lngVal,
 							"timestamp": location["timestamp"],
 							"jobId":     location["jobId"],
 						},

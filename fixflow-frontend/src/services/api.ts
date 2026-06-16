@@ -67,6 +67,17 @@ api.interceptors.response.use(
       return Promise.reject(error)
     }
 
+    const status = error.response?.status
+    const isProfileEndpoint = requestUrl.includes('/technicians/me') || requestUrl.includes('/suppliers/me') || requestUrl.includes('/users/me')
+    if (status === 404 && isProfileEndpoint && !isAuthEndpoint) {
+      useAuthStore.getState().logout()
+      toast.error('Session invalid: Profile not found. Please log in again.', { id: 'session-invalid-profile' })
+      setTimeout(() => {
+        window.location.href = '/login'
+      }, 1500)
+      return Promise.reject(error)
+    }
+
     if (error.response?.status === 401 && originalRequest && !originalRequest._retry && !isAuthEndpoint) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {

@@ -9,4 +9,5 @@ type Repository interface {
 	ListByCustomer(ctx context.Context, customerID string, page, pageSize int32) ([]*Job, int32, error)
 	AddJobImage(ctx context.Context, jobID string, imageType string, url string) error
 	GetActiveJobByTechnicianID(ctx context.Context, techID string) (*Job, error)
+	HasUnpaidPlatformFee(ctx context.Context, techID string) (bool, float64, error)
 }

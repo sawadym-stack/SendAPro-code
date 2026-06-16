@@ -576,7 +576,9 @@ func (s *Server) CounterOffer(ctx context.Context, req *supplierv1.CounterOfferR
 	// Note: full counter-limit enforcement requires a DB counter_offer_count column
 	// (added in migration 006). For now apply the rule via conditional check:
 	var counterOfferCount int
-	_ = s.db.QueryRow(ctx, "SELECT COALESCE(counter_count, 0) FROM quotations WHERE id = $1", q.ID).Scan(&counterOfferCount)
+	if s.db != nil {
+		_ = s.db.QueryRow(ctx, "SELECT COALESCE(counter_count, 0) FROM quotations WHERE id = $1", q.ID).Scan(&counterOfferCount)
+	}
 	if counterOfferCount >= 3 {
 		return nil, status.Error(codes.FailedPrecondition, "maximum counter-offers reached")
 	}
@@ -590,7 +592,12 @@ func (s *Server) CounterOffer(ctx context.Context, req *supplierv1.CounterOfferR
 	}
 
 	// Increment counter_count in DB
-	_, _ = s.db.Exec(ctx, "UPDATE quotations SET counter_count = COALESCE(counter_count, 0) + 1 WHERE id = $1", q.ID)
+	if s.db != nil {
+		_, _ = s.db.Exec(ctx, "UPDATE quotations SET counter_count = COALESCE(counter_count, 0) + 1 WHERE id = $1", q.ID)
+	}
+
+	// Save persistent notification
+	s.createNotificationHelper(ctx, updated.SupplierID, "Quotation Countered", fmt.Sprintf("Requester counter-offered Rs.%.2f for %s.", updated.CounterPrice, updated.MaterialName), "quotation")
 
 	// Notify supplier via WS
 	event := websocket.WSEvent{
@@ -681,6 +688,8 @@ func (s *Server) RejectQuotation(ctx context.Context, req *supplierv1.RejectQuot
 		otherParty = updated.RequesterID
 	}
 
+	s.createNotificationHelper(ctx, otherParty, "Quotation Rejected", fmt.Sprintf("Quotation for %s was rejected.", updated.MaterialName), "quotation")
+
 	event := websocket.WSEvent{
 		Type:   "quotation_update",
 		RoomID: "user:" + otherParty,
@@ -730,6 +739,9 @@ func (s *Server) ListQuotations(ctx context.Context, req *supplierv1.ListQuotati
 
 // notification helper handlers
 func (s *Server) notifySupplier(ctx context.Context, q domain.Quotation) {
+	// Persistent notification
+	s.createNotificationHelper(ctx, q.SupplierID, "New Quotation Request", fmt.Sprintf("You received a new quotation request for %dx %s.", q.RequestedQty, q.MaterialName), "quotation")
+
 	// FCM Push
 	if s.fcmClient != nil {
 		title := "New quotation request"
@@ -744,7 +756,7 @@ func (s *Server) notifySupplier(ctx context.Context, q domain.Quotation) {
 
 	// WS event
 	var address string
-	if q.JobID != "" {
+	if q.JobID != "" && s.db != nil {
 		_ = s.db.QueryRow(ctx, "SELECT address FROM jobs WHERE id = $1", q.JobID).Scan(&address)
 	}
 
@@ -763,6 +775,9 @@ func (s *Server) notifySupplier(ctx context.Context, q domain.Quotation) {
 }
 
 func (s *Server) notifyRequester(ctx context.Context, q domain.Quotation) {
+	// Persistent notification
+	s.createNotificationHelper(ctx, q.RequesterID, "Quotation Received", fmt.Sprintf("Supplier quoted Rs.%.2f for %s.", q.OfferedPrice, q.MaterialName), "quotation")
+
 	if s.fcmClient != nil {
 		title := "Quotation received"
 		body := fmt.Sprintf("Supplier quoted Rs.%.2f for %s", q.OfferedPrice, q.MaterialName)
@@ -788,6 +803,9 @@ func (s *Server) notifyRequester(ctx context.Context, q domain.Quotation) {
 }
 
 func (s *Server) notifySupplierAccepted(ctx context.Context, q domain.Quotation) {
+	// Persistent notification
+	s.createNotificationHelper(ctx, q.SupplierID, "Quotation Accepted", fmt.Sprintf("Your quotation for %s was accepted!", q.MaterialName), "quotation")
+
 	if s.fcmClient != nil {
 		title := "Quotation accepted"
 		body := fmt.Sprintf("Your quotation for %s was accepted!", q.MaterialName)
@@ -809,4 +827,33 @@ func (s *Server) notifySupplierAccepted(ctx context.Context, q domain.Quotation)
 		},
 	}
 	_ = s.pubsubRepo.Publish(ctx, "ws:rooms", event)
+}
+
+func (s *Server) createNotificationHelper(ctx context.Context, userID, title, message, typ string) {
+	var notifID string = "notif_fake_id"
+	var createdAt time.Time = time.Now()
+
+	if s.db != nil {
+		q := `INSERT INTO notifications (user_id, title, message, type, metadata, is_read, created_at) 
+		      VALUES ($1,$2,$3,$4,'{}',false,NOW()) RETURNING id, created_at`
+		err := s.db.QueryRow(ctx, q, userID, title, message, typ).Scan(&notifID, &createdAt)
+		if err != nil {
+			log.Printf("[Supplier Server] failed to create DB notification: %v", err)
+			return
+		}
+	}
+
+	_ = s.pubsubRepo.Publish(ctx, "ws:rooms", websocket.WSEvent{
+		Type:   "notification",
+		RoomID: "user:" + userID,
+		Payload: map[string]interface{}{
+			"id":        notifID,
+			"userId":    userID,
+			"title":     title,
+			"message":   message,
+			"type":      typ,
+			"isRead":    false,
+			"createdAt": createdAt.Format(time.RFC3339),
+		},
+	})
 }

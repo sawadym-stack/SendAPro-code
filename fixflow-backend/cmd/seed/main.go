@@ -223,7 +223,7 @@ func main() {
 		if status == "Completed" {
 			payID := uuid.NewString()
 			amount := 350.0 + float64(i*50)
-			_, _ = db.Exec(ctx, `INSERT INTO payments (id, job_id, customer_id, technician_id, amount, currency, status, razorpay_order_id, razorpay_payment_id, idempotency_key, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,'INR','Captured',$6,$7,$8,NOW(),NOW())`, payID, jid, customerID, assignedTechID, amount, fmt.Sprintf("order_%d", i), fmt.Sprintf("pay_%d", i), uuid.NewString())
+			_, _ = db.Exec(ctx, `INSERT INTO payments (id, job_id, customer_id, technician_id, amount, currency, status, razorpay_order_id, razorpay_payment_id, idempotency_key, created_at, updated_at) VALUES ($1,$2,$3,(SELECT user_id FROM technicians WHERE id = $4),$5,'INR','Captured',$6,$7,$8,NOW(),NOW())`, payID, jid, customerID, assignedTechID, amount, fmt.Sprintf("order_%d", i), fmt.Sprintf("pay_%d", i), uuid.NewString())
 			_, _ = db.Exec(ctx, `UPDATE jobs SET is_paid = true WHERE id = $1`, jid)
 
 			// Add Invoice
@@ -232,15 +232,15 @@ func main() {
 
 			// Add a review
 			randRating := int(3 + rand.Intn(3)) // 3 to 5 stars
-			_, _ = db.Exec(ctx, `INSERT INTO reviews (job_id, reviewer_id, reviewee_id, rating, comment) VALUES ($1,$2,$3,$4,'Great service, highly professional.')`, jid, customerID, assignedTechID, randRating)
+			_, _ = db.Exec(ctx, `INSERT INTO reviews (job_id, reviewer_id, reviewee_id, rating, comment) VALUES ($1,$2,(SELECT user_id FROM technicians WHERE id = $3),$4,'Great service, highly professional.')`, jid, customerID, assignedTechID, randRating)
 		}
 	}
 
 	// Update average ratings on tech profile
 	_, _ = db.Exec(ctx, `
 		UPDATE technicians t
-		SET rating = COALESCE((SELECT AVG(rating) FROM reviews WHERE reviewee_id = t.id), 5.0),
-		    review_count = COALESCE((SELECT COUNT(*) FROM reviews WHERE reviewee_id = t.id), 0)
+		SET avg_rating = COALESCE((SELECT AVG(rating) FROM reviews WHERE reviewee_id = t.user_id), 5.0),
+		    review_count = COALESCE((SELECT COUNT(*) FROM reviews WHERE reviewee_id = t.user_id), 0)
 	`)
 
 	fmt.Printf("seed complete: %d customers, %d technicians, %d suppliers, %d jobs, %d materials\n", len(customerIDs), len(techIDs), len(supplierIDs), 20, len(seededMaterials))

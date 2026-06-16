@@ -11,6 +11,7 @@ import {
   Edit,
   Trash2,
   Upload,
+  Download,
   AlertTriangle,
   CheckCircle,
   FileText,
@@ -69,19 +70,19 @@ const getCategoryStyles = (category: string) => {
   const cat = category.toLowerCase()
   switch (cat) {
     case 'wires':
-      return 'bg-amber-50 text-amber-700 border-amber-200'
+      return 'bg-amber-500/10 text-amber-400 border-amber-500/20'
     case 'pipes':
-      return 'bg-blue-50 text-blue-700 border-blue-200'
+      return 'bg-blue-500/10 text-blue-400 border-blue-500/20'
     case 'sanitary':
-      return 'bg-teal-50 text-teal-700 border-teal-200'
+      return 'bg-teal-500/10 text-teal-400 border-teal-500/20'
     case 'switches':
-      return 'bg-orange-50 text-orange-700 border-orange-200'
+      return 'bg-orange-500/10 text-orange-400 border-orange-500/20'
     case 'paint':
-      return 'bg-purple-50 text-purple-700 border-purple-200'
+      return 'bg-purple-500/10 text-purple-400 border-purple-500/20'
     case 'tools':
-      return 'bg-slate-100 text-slate-700 border-slate-300'
+      return 'bg-slate-800/40 text-slate-300 border-slate-700/30'
     default:
-      return 'bg-indigo-50 text-indigo-700 border-indigo-200'
+      return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
   }
 }
 
@@ -100,7 +101,7 @@ const Switch = ({
     disabled={disabled}
     onClick={() => onChange(!checked)}
     className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-      checked ? 'bg-emerald-500' : 'bg-slate-200'
+      checked ? 'bg-emerald-500' : 'bg-slate-800'
     } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
   >
     <span
@@ -119,6 +120,22 @@ const MaterialsPage = () => {
   const [editItem, setEditItem] = useState<Material | null>(null)
   const [deleteItem, setDeleteItem] = useState<Material | null>(null)
   const [isCsvCollapsed, setIsCsvCollapsed] = useState(true)
+
+  const downloadCsvTemplate = () => {
+    const headers = 'name,category,price,stock,description\n'
+    const row1 = '"Copper Wire 2.5mm",wires,45.00,100,"High conductivity electrical copper wire"\n'
+    const row2 = '"CPVC Pipe 3/4 inch",pipes,85.50,250,"Premium CPVC plumbing pipe"\n'
+    const row3 = '"Paint Brush 2 inch",paint,40.00,50,"Soft bristle wall painting brush"\n'
+    const blob = new Blob([headers + row1 + row2 + row3], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.setAttribute('href', url)
+    link.setAttribute('download', 'sample_materials.csv')
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
 
   // Fetch materials
   const { data, isLoading } = useQuery({
@@ -241,16 +258,16 @@ const MaterialsPage = () => {
   })
 
   return (
-    <div className="space-y-6 pb-20">
+    <div className="space-y-6 pb-20 text-slate-200">
       {/* Header */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">My Materials Directory</h1>
-          <p className="text-sm text-slate-500">Manage and update your available catalog products</p>
+          <h1 className="text-2xl font-bold text-white tracking-tight">My Materials Directory</h1>
+          <p className="text-sm text-slate-400">Manage and update your available catalog products</p>
         </div>
         <button
           onClick={() => setAddOpen(true)}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 font-medium text-white shadow-md transition hover:bg-blue-700 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 font-medium text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-500 hover:shadow-emerald-500/30 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-950"
         >
           <Plus className="h-5 w-5" />
           Add Material
@@ -265,10 +282,10 @@ const MaterialsPage = () => {
             <button
               key={cat}
               onClick={() => setActiveCategory(cat)}
-              className={`whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-medium transition ${
+              className={`whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-medium transition cursor-pointer ${
                 activeCategory === cat
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/10'
+                  : 'bg-slate-900 border border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
               }`}
             >
               {cat}
@@ -279,90 +296,90 @@ const MaterialsPage = () => {
         {/* Search */}
         <div className="relative w-full sm:max-w-xs">
           <span className="absolute inset-y-0 left-0 flex items-center pl-3">
-            <Search className="h-4 w-4 text-slate-400" />
+            <Search className="h-4 w-4 text-slate-500" />
           </span>
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search catalog..."
-            className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-10 pr-4 text-sm text-slate-800 placeholder-slate-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-xl border border-slate-800 bg-slate-900/40 py-2 pl-10 pr-4 text-sm text-slate-200 placeholder-slate-500 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
           />
         </div>
       </div>
 
       {/* Materials display */}
       {isLoading ? (
-        <div className="flex h-64 items-center justify-center rounded-2xl border border-slate-100 bg-white shadow-sm">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <div className="flex h-64 items-center justify-center rounded-2xl border border-slate-900 bg-slate-900/40 shadow-sm">
+          <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
         </div>
       ) : filteredMaterials.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center shadow-sm">
-          <div className="rounded-full bg-slate-50 p-4 text-slate-400">
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-900/20 p-12 text-center shadow-sm">
+          <div className="rounded-full bg-slate-900 p-4 text-slate-500">
             <Search className="h-8 w-8" />
           </div>
-          <h3 className="mt-4 text-lg font-semibold text-slate-700">No materials found</h3>
+          <h3 className="mt-4 text-lg font-semibold text-slate-300">No materials found</h3>
           <p className="mt-1 text-sm text-slate-500">Try adjusting your filters or search terms</p>
         </div>
       ) : (
         <>
           {/* Desktop Table View */}
-          <div className="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:block">
-            <table className="min-w-full divide-y divide-slate-100">
-              <thead className="bg-slate-50">
+          <div className="hidden overflow-hidden rounded-2xl border border-slate-900 bg-slate-900/40 backdrop-blur-md shadow-xl lg:block">
+            <table className="min-w-full divide-y divide-slate-900">
+              <thead className="bg-slate-950/60">
                 <tr>
-                  <th className="px-6 py-4.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-6 py-4.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400">
                     Thumbnail
                   </th>
-                  <th className="px-6 py-4.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-6 py-4.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400">
                     Name
                   </th>
-                  <th className="px-6 py-4.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-6 py-4.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400">
                     Category
                   </th>
-                  <th className="px-6 py-4.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-6 py-4.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-400">
                     Price
                   </th>
-                  <th className="px-6 py-4.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-6 py-4.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-400">
                     Stock Availability
                   </th>
-                  <th className="px-6 py-4.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-6 py-4.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-400">
                     Active Status
                   </th>
-                  <th className="px-6 py-4.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-6 py-4.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-400">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
+              <tbody className="divide-y divide-slate-900 bg-transparent">
                 {filteredMaterials.map((m) => {
                   const stockVal = localStock[m.id] !== undefined ? localStock[m.id] : m.stock
-                  let stockColor = 'text-green-600 font-semibold'
+                  let stockColor = 'text-emerald-400 font-semibold'
                   let stockLabel = `${stockVal}`
                   if (stockVal === 0) {
-                    stockColor = 'text-rose-600 font-bold'
+                    stockColor = 'text-rose-500 font-bold'
                     stockLabel = 'Out of stock'
                   } else if (stockVal <= 5) {
-                    stockColor = 'text-amber-600 font-medium'
+                    stockColor = 'text-amber-400 font-medium'
                     stockLabel = `${stockVal} left`
                   }
 
                   return (
-                    <tr key={m.id} className="hover:bg-slate-50 transition duration-150">
+                    <tr key={m.id} className="hover:bg-slate-900/20 transition duration-150">
                       <td className="whitespace-nowrap px-6 py-4">
                         {m.imageUrl ? (
                           <img
                             src={m.imageUrl}
                             alt={m.name}
-                            className="h-10 w-10 rounded-lg object-cover shadow-sm border border-slate-100"
+                            className="h-10 w-10 rounded-lg object-cover shadow-sm border border-slate-900"
                           />
                         ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-50 border border-slate-150 shadow-xs">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-950 border border-slate-900 shadow-xs">
                             {getCategoryIcon(m.category)}
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-sm font-medium text-slate-800">{m.name}</td>
+                      <td className="px-6 py-4 text-sm font-medium text-slate-200">{m.name}</td>
                       <td className="whitespace-nowrap px-6 py-4 text-sm">
                         <span
                           className={`rounded-full border px-2.5 py-0.5 text-xs font-medium uppercase tracking-wider ${getCategoryStyles(
@@ -372,27 +389,27 @@ const MaterialsPage = () => {
                           {m.category}
                         </span>
                       </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-semibold text-slate-900">
+                      <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-semibold text-emerald-400">
                         Rs. {m.price.toFixed(2)}
                       </td>
                       <td className="whitespace-nowrap px-6 py-4">
                         <div className="flex flex-col items-center gap-1.5">
                           <span className={`text-xs ${stockColor}`}>{stockLabel}</span>
-                          <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 p-1">
+                          <div className="inline-flex items-center rounded-lg border border-slate-800 bg-slate-950/40 p-1">
                             <button
                               type="button"
                               disabled={stockVal <= 0}
                               onClick={() => handleStockChange(m.id, stockVal, -1)}
-                              className="flex h-6 w-6 items-center justify-center rounded bg-white text-slate-600 shadow-sm transition hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="flex h-6 w-6 items-center justify-center rounded bg-slate-900 text-slate-300 border border-slate-800 shadow-sm transition hover:bg-slate-800 disabled:opacity-55 disabled:cursor-not-allowed cursor-pointer"
                             >
                               -
                             </button>
-                            <span className="w-10 text-center text-xs font-semibold text-slate-700">{stockVal}</span>
+                            <span className="w-10 text-center text-xs font-semibold text-slate-300">{stockVal}</span>
                             <button
                               type="button"
                               disabled={stockVal >= 9999}
                               onClick={() => handleStockChange(m.id, stockVal, 1)}
-                              className="flex h-6 w-6 items-center justify-center rounded bg-white text-slate-600 shadow-sm transition hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="flex h-6 w-6 items-center justify-center rounded bg-slate-900 text-slate-300 border border-slate-800 shadow-sm transition hover:bg-slate-800 disabled:opacity-55 disabled:cursor-not-allowed cursor-pointer"
                             >
                               +
                             </button>
@@ -409,14 +426,14 @@ const MaterialsPage = () => {
                         <div className="flex items-center justify-center gap-3">
                           <button
                             onClick={() => setEditItem(m)}
-                            className="text-blue-600 hover:text-blue-900 transition"
+                            className="text-emerald-400 hover:text-emerald-300 transition cursor-pointer"
                             title="Edit Material"
                           >
                             <Edit className="h-4.5 w-4.5" />
                           </button>
                           <button
                             onClick={() => setDeleteItem(m)}
-                            className="text-rose-600 hover:text-rose-900 transition"
+                            className="text-rose-500 hover:text-rose-400 transition cursor-pointer"
                             title="Delete Material"
                           >
                             <Trash2 className="h-4.5 w-4.5" />
@@ -434,31 +451,31 @@ const MaterialsPage = () => {
           <div className="grid gap-4 sm:grid-cols-2 lg:hidden">
             {filteredMaterials.map((m) => {
               const stockVal = localStock[m.id] !== undefined ? localStock[m.id] : m.stock
-              let stockColor = 'text-green-600 font-semibold'
+              let stockColor = 'text-emerald-400 font-semibold'
               let stockLabel = `${stockVal}`
               if (stockVal === 0) {
-                stockColor = 'text-rose-600 font-bold'
+                stockColor = 'text-rose-500 font-bold'
                 stockLabel = 'Out of stock'
               } else if (stockVal <= 5) {
-                stockColor = 'text-amber-600 font-medium'
+                stockColor = 'text-amber-400 font-medium'
                 stockLabel = `${stockVal} left`
               }
 
               return (
                 <div
                   key={m.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-4 hover:shadow-md transition duration-150"
+                  className="rounded-2xl border border-slate-900 bg-slate-900/40 p-4 shadow-md space-y-4 hover:border-slate-800 transition duration-150"
                 >
                   <div className="flex items-start gap-3">
                     {m.imageUrl ? (
-                      <img src={m.imageUrl} alt={m.name} className="h-12 w-12 rounded-xl object-cover border" />
+                      <img src={m.imageUrl} alt={m.name} className="h-12 w-12 rounded-xl object-cover border border-slate-900" />
                     ) : (
-                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-50 border border-slate-150 shadow-xs">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-950 border border-slate-900 shadow-xs">
                         {getCategoryIcon(m.category)}
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-semibold text-slate-800 truncate">{m.name}</h4>
+                      <h4 className="font-semibold text-white truncate">{m.name}</h4>
                       <div className="mt-1 flex items-center gap-2">
                         <span
                           className={`rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${getCategoryStyles(
@@ -467,12 +484,12 @@ const MaterialsPage = () => {
                         >
                           {m.category}
                         </span>
-                        <span className="text-sm font-bold text-slate-900">Rs. {m.price.toFixed(2)}</span>
+                        <span className="text-sm font-bold text-emerald-400">Rs. {m.price.toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between border-t border-slate-100 pt-3">
+                  <div className="flex items-center justify-between border-t border-slate-900 pt-3">
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-slate-500 font-medium">Available:</span>
                       <Switch
@@ -482,21 +499,21 @@ const MaterialsPage = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={`text-xs ${stockColor}`}>{stockLabel}</span>
-                      <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                      <div className="inline-flex items-center rounded-lg border border-slate-800 bg-slate-950/40 p-0.5">
                         <button
                           type="button"
                           disabled={stockVal <= 0}
                           onClick={() => handleStockChange(m.id, stockVal, -1)}
-                          className="flex h-6.5 w-6.5 items-center justify-center rounded bg-white text-slate-600 shadow-sm"
+                          className="flex h-6.5 w-6.5 items-center justify-center rounded bg-slate-900 text-slate-300 border border-slate-800 shadow-sm"
                         >
                           -
                         </button>
-                        <span className="w-8 text-center text-xs font-semibold text-slate-700">{stockVal}</span>
+                        <span className="w-8 text-center text-xs font-semibold text-slate-300">{stockVal}</span>
                         <button
                           type="button"
                           disabled={stockVal >= 9999}
                           onClick={() => handleStockChange(m.id, stockVal, 1)}
-                          className="flex h-6.5 w-6.5 items-center justify-center rounded bg-white text-slate-600 shadow-sm"
+                          className="flex h-6.5 w-6.5 items-center justify-center rounded bg-slate-900 text-slate-300 border border-slate-800 shadow-sm"
                         >
                           +
                         </button>
@@ -504,16 +521,16 @@ const MaterialsPage = () => {
                     </div>
                   </div>
 
-                  <div className="flex justify-end gap-3 border-t border-slate-100 pt-3">
+                  <div className="flex justify-end gap-3 border-t border-slate-900 pt-3">
                     <button
                       onClick={() => setEditItem(m)}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-900"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-400 hover:text-emerald-300 cursor-pointer"
                     >
                       <Edit className="h-3.5 w-3.5" /> Edit
                     </button>
                     <button
                       onClick={() => setDeleteItem(m)}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600 hover:text-rose-900"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-500 hover:text-rose-400 cursor-pointer"
                     >
                       <Trash2 className="h-3.5 w-3.5" /> Delete
                     </button>
@@ -526,22 +543,32 @@ const MaterialsPage = () => {
       )}
 
       {/* Bulk CSV Import Section */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-2xl border border-slate-900 bg-slate-900/40 shadow-sm">
         <button
           onClick={() => setIsCsvCollapsed(!isCsvCollapsed)}
-          className="flex w-full items-center justify-between bg-slate-50 px-6 py-4 text-left font-semibold text-slate-700 hover:bg-slate-100 transition"
+          className="flex w-full items-center justify-between bg-slate-900/60 px-6 py-4 text-left font-semibold text-slate-300 hover:bg-slate-900 transition cursor-pointer"
         >
           <span className="flex items-center gap-2">
-            <Upload className="h-5 w-5 text-slate-500" />
+            <Upload className="h-5 w-5 text-slate-400" />
             Bulk CSV Import
           </span>
           {isCsvCollapsed ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
         </button>
         {!isCsvCollapsed && (
-          <div className="p-6 space-y-4">
-            <div className="rounded-xl bg-slate-50 border border-slate-150 p-4 text-sm text-slate-600">
-              <p className="font-semibold text-slate-700 mb-1">Expected CSV columns:</p>
-              <code className="block bg-slate-200 p-2 rounded text-xs overflow-x-auto">
+          <div className="p-6 space-y-4 bg-slate-950/30">
+            <div className="rounded-xl bg-slate-950 border border-slate-900 p-4 text-sm text-slate-400">
+              <div className="flex justify-between items-center mb-1">
+                <p className="font-semibold text-slate-300">Expected CSV columns:</p>
+                <button
+                  type="button"
+                  onClick={downloadCsvTemplate}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 transition cursor-pointer"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download Sample CSV
+                </button>
+              </div>
+              <code className="block bg-slate-950 p-2 rounded text-xs overflow-x-auto text-emerald-400 border border-slate-900 mt-2">
                 name,category,price,stock,description
                 <br />
                 "Copper Wire 2.5mm",wires,45.00,100,"Standard electrical wire"
@@ -572,20 +599,20 @@ const MaterialsPage = () => {
       )}
 
       {deleteItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl border border-slate-100">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-rose-50 text-rose-600 mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-slate-950 p-6 shadow-xl border border-slate-900">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/20 mb-4">
               <AlertTriangle className="h-6 w-6" />
             </div>
-            <h3 className="text-lg font-bold text-slate-800">Delete {deleteItem.name}?</h3>
-            <p className="mt-2 text-sm text-slate-500">
+            <h3 className="text-lg font-bold text-white">Delete {deleteItem.name}?</h3>
+            <p className="mt-2 text-sm text-slate-400">
               This will remove the material from your listing. Pending quotations will not be affected.
             </p>
             <div className="mt-6 flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setDeleteItem(null)}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 focus:outline-none"
+                className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-800 transition focus:outline-none cursor-pointer"
               >
                 Cancel
               </button>
@@ -593,7 +620,7 @@ const MaterialsPage = () => {
                 type="button"
                 disabled={deleteMutation.isPending}
                 onClick={() => deleteMutation.mutate(deleteItem.id)}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-rose-700 disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-rose-700 disabled:opacity-50 transition cursor-pointer"
               >
                 {deleteMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Delete Material
@@ -686,8 +713,8 @@ const BulkImportCsv = ({ queryClient }: { queryClient: any }) => {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition">
-          <FileText className="h-4.5 w-4.5 text-slate-500" />
+        <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:bg-slate-800 hover:border-slate-700 shadow-md backdrop-blur-md transition">
+          <FileText className="h-4.5 w-4.5 text-slate-400" />
           {file ? file.name : 'Select CSV File'}
           <input
             type="file"
@@ -706,30 +733,30 @@ const BulkImportCsv = ({ queryClient }: { queryClient: any }) => {
               setPreviewRows([])
               setValidationResults({ validRows: [], invalidCount: 0, errors: {} })
             }}
-            className="rounded-full p-1.5 hover:bg-slate-100 transition"
+            className="rounded-full p-1.5 hover:bg-slate-900 text-slate-400 hover:text-slate-200 transition cursor-pointer"
           >
-            <X className="h-4 w-4 text-slate-500" />
+            <X className="h-4 w-4" />
           </button>
         )}
       </div>
 
       {previewRows.length > 0 && (
         <div className="space-y-4">
-          <h4 className="text-sm font-semibold text-slate-700">Preview (First 10 Rows)</h4>
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="min-w-full text-xs divide-y divide-slate-100">
-              <thead className="bg-slate-50">
+          <h4 className="text-sm font-bold text-slate-300">Preview (First 10 Rows)</h4>
+          <div className="overflow-x-auto rounded-xl border border-slate-900 bg-slate-950/60">
+            <table className="min-w-full text-xs divide-y divide-slate-900">
+              <thead className="bg-slate-950/80">
                 <tr>
-                  <th className="px-4 py-2.5 text-left text-slate-500 font-semibold">Row</th>
-                  <th className="px-4 py-2.5 text-left text-slate-500 font-semibold">Status</th>
-                  <th className="px-4 py-2.5 text-left text-slate-500 font-semibold">Name</th>
-                  <th className="px-4 py-2.5 text-left text-slate-500 font-semibold">Category</th>
-                  <th className="px-4 py-2.5 text-right text-slate-500 font-semibold">Price</th>
-                  <th className="px-4 py-2.5 text-center text-slate-500 font-semibold">Stock</th>
-                  <th className="px-4 py-2.5 text-left text-slate-500 font-semibold">Errors</th>
+                  <th className="px-4 py-2.5 text-left text-slate-400 font-bold uppercase tracking-wider">Row</th>
+                  <th className="px-4 py-2.5 text-center text-slate-400 font-bold uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-2.5 text-left text-slate-400 font-bold uppercase tracking-wider">Name</th>
+                  <th className="px-4 py-2.5 text-left text-slate-400 font-bold uppercase tracking-wider">Category</th>
+                  <th className="px-4 py-2.5 text-right text-slate-400 font-bold uppercase tracking-wider">Price</th>
+                  <th className="px-4 py-2.5 text-center text-slate-400 font-bold uppercase tracking-wider">Stock</th>
+                  <th className="px-4 py-2.5 text-left text-slate-400 font-bold uppercase tracking-wider">Errors</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
+              <tbody className="divide-y divide-slate-900 bg-transparent">
                 {previewRows.slice(0, 10).map((row, idx) => {
                   const hasErrors = !!validationResults.errors[idx]
                   const rowErrors = validationResults.errors[idx] ?? []
@@ -737,10 +764,10 @@ const BulkImportCsv = ({ queryClient }: { queryClient: any }) => {
                   return (
                     <tr 
                       key={idx} 
-                      className={hasErrors ? 'bg-rose-50/50' : 'hover:bg-slate-50'}
+                      className={hasErrors ? 'bg-rose-500/10 hover:bg-rose-500/15' : 'hover:bg-slate-900/30'}
                       title={hasErrors ? `Validation errors: ${rowErrors.join(', ')}` : 'Valid row'}
                     >
-                      <td className="px-4 py-2 font-medium text-slate-500">{idx + 1}</td>
+                      <td className="px-4 py-2 font-medium text-slate-400">{idx + 1}</td>
                       <td className="px-4 py-2 text-center">
                         {hasErrors ? (
                           <span title={rowErrors.join(', ')} className="cursor-help"><AlertTriangle className="h-4 w-4 text-rose-500 mx-auto" /></span>
@@ -748,11 +775,11 @@ const BulkImportCsv = ({ queryClient }: { queryClient: any }) => {
                           <CheckCircle className="h-4 w-4 text-emerald-500 mx-auto" />
                         )}
                       </td>
-                      <td className="px-4 py-2 font-medium text-slate-800">{row.name}</td>
-                      <td className="px-4 py-2 text-slate-600">{row.category}</td>
-                      <td className="px-4 py-2 text-right font-semibold text-slate-800">{row.price}</td>
-                      <td className="px-4 py-2 text-center text-slate-700">{row.stock}</td>
-                      <td className="px-4 py-2 text-rose-600 font-medium">
+                      <td className="px-4 py-2 font-semibold text-slate-200">{row.name}</td>
+                      <td className="px-4 py-2 text-slate-400">{row.category}</td>
+                      <td className="px-4 py-2 text-right font-mono font-bold text-slate-200">{row.price}</td>
+                      <td className="px-4 py-2 text-center font-semibold text-slate-300">{row.stock}</td>
+                      <td className="px-4 py-2 text-rose-400 font-medium">
                         {rowErrors.length > 0 ? rowErrors.join(', ') : '-'}
                       </td>
                     </tr>
@@ -773,8 +800,8 @@ const BulkImportCsv = ({ queryClient }: { queryClient: any }) => {
               Import {validationResults.validRows.length} Valid Rows
             </button>
             {validationResults.invalidCount > 0 && (
-              <span className="text-xs text-rose-600 font-semibold flex items-center gap-1">
-                <AlertTriangle className="h-4 w-4" />
+              <span className="text-xs text-rose-400 font-semibold flex items-center gap-1">
+                <AlertTriangle className="h-4.5 w-4.5" />
                 Skipping {validationResults.invalidCount} invalid rows
               </span>
             )}
@@ -859,30 +886,30 @@ const MaterialDialog = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
-      <div className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl border border-slate-100 my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs overflow-y-auto">
+      <div className="relative w-full max-w-lg rounded-2xl bg-slate-950 p-6 shadow-xl border border-slate-900 my-8">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
+          className="absolute top-4 right-4 text-slate-500 hover:text-slate-300 cursor-pointer"
         >
           <X className="h-5 w-5" />
         </button>
 
-        <h3 className="text-xl font-bold text-slate-800 mb-6">{title}</h3>
+        <h3 className="text-xl font-bold text-white mb-6">{title}</h3>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4.5">
           {/* File Upload / Image Preview */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-600 block">Product Image</label>
+            <label className="text-xs font-semibold text-slate-400 block">Product Image</label>
             <div className="flex items-center gap-4">
               {imagePreview ? (
                 <img
                   src={imagePreview}
                   alt="Preview"
-                  className="h-16 w-16 rounded-xl object-cover border border-slate-200"
+                  className="h-16 w-16 rounded-xl object-cover border border-slate-900"
                 />
               ) : (
-                <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-slate-50 border-2 border-dashed border-slate-200 text-slate-400">
+                <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-slate-900 border-2 border-dashed border-slate-800 text-slate-500">
                   No Image
                 </div>
               )}
@@ -901,48 +928,48 @@ const MaterialDialog = ({
                       setImagePreview(URL.createObjectURL(f))
                     }
                   }}
-                  className="w-full text-xs text-slate-500 file:mr-3 file:cursor-pointer file:rounded-xl file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-slate-700 hover:file:bg-slate-200"
+                  className="w-full text-xs text-slate-400 file:mr-3 file:cursor-pointer file:rounded-xl file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-slate-300 hover:file:bg-slate-800"
                 />
-                <p className="mt-1 text-[10px] text-slate-400">JPG, PNG or WEBP, max 2MB</p>
+                <p className="mt-1 text-[10px] text-slate-500">JPG, PNG or WEBP, max 2MB</p>
               </div>
             </div>
           </div>
 
           {/* Name */}
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600 block">Product Name</label>
+            <label className="text-xs font-semibold text-slate-400 block">Product Name</label>
             <input
               type="text"
               {...register('name')}
               placeholder="e.g. Copper Wire 2.5mm"
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             />
-            {errors.name && <p className="text-xs text-rose-500 font-medium">{errors.name.message}</p>}
+            {errors.name && <p className="text-xs text-rose-400 font-medium">{errors.name.message}</p>}
           </div>
 
           {/* Category */}
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600 block">Category</label>
+            <label className="text-xs font-semibold text-slate-400 block">Category</label>
             <select
               {...register('category')}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             >
-              <option value="">Select Category</option>
+              <option value="" className="bg-slate-950">Select Category</option>
               {VALID_CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>
+                <option key={cat} value={cat} className="bg-slate-950">
                   {cat.toUpperCase()}
                 </option>
               ))}
             </select>
-            {errors.category && <p className="text-xs text-rose-500 font-medium">{errors.category.message}</p>}
+            {errors.category && <p className="text-xs text-rose-400 font-medium">{errors.category.message}</p>}
           </div>
 
           {/* Price & Initial Stock Row */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600 block">Unit Price (Rs.)</label>
+              <label className="text-xs font-semibold text-slate-400 block">Unit Price (Rs.)</label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 text-sm font-semibold">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500 text-sm font-semibold">
                   Rs.
                 </span>
                 <input
@@ -950,48 +977,48 @@ const MaterialDialog = ({
                   step="0.01"
                   {...register('price', { valueAsNumber: true })}
                   placeholder="0.00"
-                  className="w-full rounded-xl border border-slate-200 pl-9 pr-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full rounded-xl border border-slate-800 bg-slate-900/60 pl-9 pr-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 />
               </div>
-              {errors.price && <p className="text-xs text-rose-500 font-medium">{errors.price.message}</p>}
+              {errors.price && <p className="text-xs text-rose-400 font-medium">{errors.price.message}</p>}
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600 block">Stock Quantity</label>
+              <label className="text-xs font-semibold text-slate-400 block">Stock Quantity</label>
               <input
                 type="number"
                 {...register('stock', { valueAsNumber: true })}
                 placeholder="0"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
               />
-              {errors.stock && <p className="text-xs text-rose-500 font-medium">{errors.stock.message}</p>}
+              {errors.stock && <p className="text-xs text-rose-400 font-medium">{errors.stock.message}</p>}
             </div>
           </div>
 
           {/* Description */}
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-600 block">Description (Optional)</label>
+            <label className="text-xs font-semibold text-slate-400 block">Description (Optional)</label>
             <textarea
               {...register('description')}
               placeholder="Enter product description..."
               rows={3}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             />
-            {errors.description && <p className="text-xs text-rose-500 font-medium">{errors.description.message}</p>}
+            {errors.description && <p className="text-xs text-rose-400 font-medium">{errors.description.message}</p>}
           </div>
 
-          <div className="mt-6 flex justify-end gap-3 pt-3 border-t border-slate-100">
+          <div className="mt-6 flex justify-end gap-3 pt-3 border-t border-slate-900">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 focus:outline-none"
+              className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-800 focus:outline-none cursor-pointer transition"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-50 cursor-pointer transition"
             >
               {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
               {isEdit ? 'Save Changes' : 'Create Product'}

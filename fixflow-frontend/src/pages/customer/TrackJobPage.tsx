@@ -23,12 +23,18 @@ const TrackJobPage = () => {
   const { jobId = '' } = useParams()
   const navigate = useNavigate()
   const token = useAuthStore((s) => s.token)
-  const ws = useWS()
+  const { connect, disconnect, on, off } = useWS()
   const [localStatus, setLocalStatus] = useState<JobStatus | null>(null)
   const updateTechnicianPosition = useJobStore((s) => s.updateTechnicianPosition)
   const technicianPosition = useJobStore((s) => s.technicianPosition)
   const user = useAuthStore((s) => s.user)
   const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    if (jobId) {
+      qc.invalidateQueries({ queryKey: ['chatRoom', jobId] })
+    }
+  }, [jobId, qc])
 
   const { data: job } = useQuery({
     queryKey: QUERY_KEYS.jobById(jobId),
@@ -73,7 +79,7 @@ const TrackJobPage = () => {
 
   useEffect(() => {
     if (!token || !jobId) return
-    ws.connect(`job:${jobId}`, token)
+    connect(`job:${jobId}`, token)
 
     const locationHandler = (payload: any) => {
       updateTechnicianPosition(payload.lat, payload.lng, payload.eta ?? 0)
@@ -101,20 +107,24 @@ const TrackJobPage = () => {
     const newMessageHandler = (payload: any) => {
       if (payload.senderId !== user?.id) {
         setUnreadCount((c) => c + 1)
+        qc.setQueryData(['chatRoom', jobId], (old: any) => {
+          if (!old) return old
+          return { ...old, unreadCount: (old.unreadCount ?? 0) + 1 }
+        })
       }
     }
 
-    ws.on('location_update', locationHandler)
-    ws.on('job_status', statusHandler)
-    ws.on('new_message', newMessageHandler)
+    on('location_update', locationHandler)
+    on('job_status', statusHandler)
+    on('new_message', newMessageHandler)
 
     return () => {
-      ws.off('location_update', locationHandler)
-      ws.off('job_status', statusHandler)
-      ws.off('new_message', newMessageHandler)
-      ws.disconnect()
+      off('location_update', locationHandler)
+      off('job_status', statusHandler)
+      off('new_message', newMessageHandler)
+      disconnect()
     }
-  }, [token, jobId, ws, updateTechnicianPosition, user?.id, qc])
+  }, [token, jobId, connect, disconnect, on, off, updateTechnicianPosition, user?.id, qc])
 
   useEffect(() => {
     if (status !== JobStatus.Requested) return
@@ -169,6 +179,27 @@ const TrackJobPage = () => {
       setIsCancelling(false)
     }
   }
+
+  const getStatusHeadline = () => {
+    switch (status) {
+      case JobStatus.Requested:
+        return { title: '🔍 Finding Your Technician...', desc: 'We are matching your request with nearby verified service specialists. Please hold on.', bg: 'from-amber-500/15 to-amber-900/5 border-amber-500/25 text-amber-400' }
+      case JobStatus.Accepted:
+        return { title: '✅ Specialist Assigned', desc: 'A technician has accepted your request and is preparing their tools to start driving.', bg: 'from-blue-500/15 to-blue-900/5 border-blue-500/25 text-blue-405' }
+      case JobStatus.OnTheWay:
+        return { title: '🚗 Technician is On The Way!', desc: 'The technician is driving to your location. You can track their arrival live on the map.', bg: 'from-sky-500/15 to-sky-900/5 border-sky-500/25 text-sky-400' }
+      case JobStatus.Arrived:
+        return { title: '📍 Technician Has Arrived!', desc: 'Your service specialist has arrived at your address. Please meet them at the door.', bg: 'from-indigo-500/15 to-indigo-900/5 border-indigo-500/25 text-indigo-400' }
+      case JobStatus.Working:
+        return { title: '🔧 Work In Progress...', desc: 'The technician has started service repairs. Let them know if you have any questions.', bg: 'from-violet-500/15 to-violet-900/5 border-violet-500/25 text-violet-400' }
+      case JobStatus.Completed:
+        return { title: '🎉 Service Completed Successfully', desc: 'The job is done. Please pay the generated invoice below and rate your experience.', bg: 'from-emerald-500/15 to-emerald-900/5 border-emerald-500/25 text-emerald-400' }
+      default:
+        return { title: '❌ Appointment Cancelled', desc: 'This job request was cancelled. Go back to your dashboard to request a new service.', bg: 'from-red-500/15 to-red-900/5 border-red-500/25 text-red-400' }
+    }
+  }
+  
+  const headline = getStatusHeadline()
 
   const handleReviewSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -245,6 +276,12 @@ const TrackJobPage = () => {
             {status === JobStatus.OnTheWay ? 'On The Way' : status}
           </span>
         </div>
+      </div>
+
+      {/* Bold Status HUD Banner */}
+      <div className={`rounded-3xl border bg-gradient-to-r ${headline.bg} p-6 shadow-md`}>
+        <h2 className="text-lg font-black tracking-wide">{headline.title}</h2>
+        <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">{headline.desc}</p>
       </div>
 
       {/* 2-Column Grid */}
@@ -356,12 +393,9 @@ const TrackJobPage = () => {
               </div>
 
               <div className="rounded-xl bg-slate-950/40 p-4 border border-slate-900/55">
-                <p className="text-xs text-slate-500 font-semibold">Estimate</p>
-                <div className="mt-1 flex items-center gap-1">
-                  <DollarSign className="h-4 w-4 text-emerald-400" />
-                  <span className="text-sm font-bold text-slate-200">
-                    {job.amount ? `$${job.amount}` : `$${pricing?.total}`}
-                  </span>
+                <p className="text-xs text-slate-500 font-semibold">Estimated Cost</p>
+                <div className="mt-1 flex items-center gap-1 text-sm font-bold text-emerald-450 font-mono">
+                  <span>Rs. {job.amount ? job.amount.toFixed(2) : pricing?.total.toFixed(2)}</span>
                 </div>
               </div>
 
@@ -433,7 +467,14 @@ const TrackJobPage = () => {
               {/* Action Buttons */}
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <button 
-                  onClick={() => navigate(`/customer/chat/${jobId}`)}
+                  onClick={() => {
+                    setUnreadCount(0)
+                    qc.setQueryData(['chatRoom', jobId], (old: any) => {
+                      if (!old) return old
+                      return { ...old, unreadCount: 0 }
+                    })
+                    navigate(`/customer/chat/${jobId}`)
+                  }}
                   className="relative flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-950 text-slate-350 hover:text-white hover:border-slate-700 hover:bg-slate-900 transition duration-300 font-bold text-xs text-center py-3 px-3 shadow-md active:scale-95 cursor-pointer"
                 >
                   <MessageSquare className="h-4 w-4 text-sky-400" />
@@ -473,27 +514,31 @@ const TrackJobPage = () => {
 
           {/* Pricing Receipt Card */}
           {pricing && (
-            <div className="rounded-2xl border border-slate-900 bg-slate-900/40 backdrop-blur-xl p-6 shadow-xl shadow-slate-950/20 space-y-4">
-              <h3 className="text-sm font-bold text-slate-200 border-b border-slate-900 pb-3 font-display">Price Breakdown</h3>
-              <div className="space-y-2.5 text-xs text-slate-400">
+            <div className="rounded-2xl border border-slate-900 bg-slate-900/40 p-6 shadow-xl space-y-4 relative overflow-hidden">
+              <div className="absolute top-0 right-0 -mt-6 -mr-6 w-20 h-20 bg-emerald-500/5 rounded-full blur-xl" />
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest font-mono border-b border-slate-900 pb-3">Billing Invoice Estimate</h3>
+              <div className="space-y-3 text-xs text-slate-400">
                 <div className="flex justify-between">
-                  <span>Base Fare ({job.serviceType})</span>
-                  <span className="font-semibold text-slate-200">${pricing.base}</span>
+                  <span className="text-slate-500">Base Fare ({job.serviceType})</span>
+                  <span className="font-semibold text-slate-200 font-mono">Rs. {pricing.base.toFixed(2)}</span>
                 </div>
                 {pricing.urgencyFee > 0 && (
                   <div className="flex justify-between">
-                    <span>Urgency Surcharge</span>
-                    <span className="font-semibold text-red-400">+${pricing.urgencyFee}</span>
+                    <span className="text-slate-500">Urgency Surcharge</span>
+                    <span className="font-semibold text-red-400 font-mono">+Rs. {pricing.urgencyFee.toFixed(2)}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span>Estimated Taxes (8%)</span>
-                  <span className="font-semibold text-slate-200">${pricing.tax}</span>
+                  <span className="text-slate-505">Estimated Taxes (8%)</span>
+                  <span className="font-semibold text-slate-200 font-mono">Rs. {pricing.tax.toFixed(2)}</span>
                 </div>
-                <div className="border-t border-slate-900 pt-2.5 flex justify-between text-sm font-bold text-slate-200">
-                  <span>Total Estimated Cost</span>
-                  <span className="text-emerald-400 font-bold">
-                    {job.amount ? `$${job.amount}` : `$${pricing.total}`}
+                <div className="border-t border-dashed border-slate-800 pt-3 flex justify-between items-center">
+                  <div>
+                    <span className="text-xs font-bold text-slate-300">Total Price Estimate</span>
+                    <p className="text-[9px] text-slate-500 mt-0.5 font-mono">Labor & trip total</p>
+                  </div>
+                  <span className="text-xl font-black text-emerald-450 font-mono">
+                    Rs. {job.amount ? job.amount.toFixed(2) : pricing.total.toFixed(2)}
                   </span>
                 </div>
               </div>

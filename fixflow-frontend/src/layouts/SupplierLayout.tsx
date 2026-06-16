@@ -13,9 +13,9 @@ const navigationItems = [
 
 const SupplierLayout = () => {
   return (
-    <div className="flex min-h-screen bg-neutral-50">
-      <Sidebar items={navigationItems} title="SendAPro Supply" />
-      <main className="flex-1 overflow-auto">
+    <div className="flex min-h-screen bg-slate-950 text-slate-100 font-sans">
+      <Sidebar items={navigationItems} title="SendAPro Supply" dark />
+      <main className="flex-1 overflow-auto pt-20 md:pt-8 p-6 md:p-8">
         <Outlet />
       </main>
     </div>

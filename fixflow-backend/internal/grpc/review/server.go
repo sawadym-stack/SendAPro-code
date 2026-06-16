@@ -120,11 +120,26 @@ func (s *Server) SubmitReview(ctx context.Context, req *reviewv1.SubmitReviewReq
 		reviewerName = reviewerUser.Name
 	}
 
+	// Resolve revieweeId: the frontend sends the technician profile ID,
+	// but reviews.reviewee_id must reference users.id.
+	// Try to look up the user_id from the technicians table.
+	resolvedRevieweeID := req.RevieweeId
+	if s.db != nil {
+		var techUserID string
+		lookupErr := s.db.QueryRow(ctx,
+			"SELECT user_id FROM technicians WHERE id = $1 OR user_id = $1",
+			req.RevieweeId,
+		).Scan(&techUserID)
+		if lookupErr == nil && techUserID != "" {
+			resolvedRevieweeID = techUserID
+		}
+	}
+
 	// Save review
 	saved, err := s.reviewRepo.SubmitReview(ctx, reviewdomain.Review{
 		JobID:      req.JobId,
 		ReviewerID: reviewerID,
-		RevieweeID: req.RevieweeId,
+		RevieweeID: resolvedRevieweeID,
 		Rating:     int(req.Rating),
 		Comment:    req.Comment,
 		ImageURLs:  req.ImageUrls,
@@ -133,11 +148,14 @@ func (s *Server) SubmitReview(ctx context.Context, req *reviewv1.SubmitReviewReq
 		return nil, status.Errorf(codes.Internal, "failed to save review: %v", err)
 	}
 
+	// Save persistent notification
+	s.createNotificationHelper(ctx, resolvedRevieweeID, "New Review Received", fmt.Sprintf("%s gave you %d stars: %s", reviewerName, req.Rating, req.Comment), "review")
+
 	// Notify reviewee via FCM
 	if s.fcmClient != nil {
 		go func() {
 			reqPush := firebase.PushRequest{
-				UserID: req.RevieweeId,
+				UserID: resolvedRevieweeID,
 				Title:  "New Review Received",
 				Body:   fmt.Sprintf("%s gave you %d stars", reviewerName, req.Rating),
 				Type:   "review",
@@ -151,7 +169,7 @@ func (s *Server) SubmitReview(ctx context.Context, req *reviewv1.SubmitReviewReq
 	// Publish WS event to reviewee room
 	_ = s.pubsubRepo.Publish(ctx, "ws:rooms", websocket.WSEvent{
 		Type:   "review_received",
-		RoomID: "user:" + req.RevieweeId,
+		RoomID: "user:" + resolvedRevieweeID,
 		Payload: map[string]interface{}{
 			"reviewerName": reviewerName,
 			"rating":       req.Rating,
@@ -176,12 +194,26 @@ func (s *Server) SubmitReview(ctx context.Context, req *reviewv1.SubmitReviewReq
 }
 
 func (s *Server) GetReviews(ctx context.Context, req *reviewv1.GetReviewsRequest) (*reviewv1.GetReviewsResponse, error) {
-	list, total, err := s.reviewRepo.GetReviews(ctx, req.RevieweeId, int(req.Page), int(req.Limit))
+	// Resolve revieweeId: callers may pass the technician profile ID,
+	// but reviews are stored with the user_id. Resolve if needed.
+	revieweeID := req.RevieweeId
+	if s.db != nil && revieweeID != "" {
+		var techUserID string
+		lookupErr := s.db.QueryRow(ctx,
+			"SELECT user_id FROM technicians WHERE id = $1 OR user_id = $1",
+			revieweeID,
+		).Scan(&techUserID)
+		if lookupErr == nil && techUserID != "" {
+			revieweeID = techUserID
+		}
+	}
+
+	list, total, err := s.reviewRepo.GetReviews(ctx, revieweeID, int(req.Page), int(req.Limit))
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to get reviews: %v", err)
 	}
 
-	avg, count, err := s.reviewRepo.GetAverageRating(ctx, req.RevieweeId)
+	avg, count, err := s.reviewRepo.GetAverageRating(ctx, revieweeID)
 	if err != nil {
 		avg = 0.0
 		count = 0
@@ -208,4 +240,30 @@ func (s *Server) GetReviews(ctx context.Context, req *reviewv1.GetReviewsRequest
 		AverageRating: avg,
 		TotalRatings:  int32(count),
 	}, nil
+}
+
+func (s *Server) createNotificationHelper(ctx context.Context, userID, title, message, typ string) {
+	q := `INSERT INTO notifications (user_id, title, message, type, metadata, is_read, created_at) 
+	      VALUES ($1,$2,$3,$4,'{}',false,NOW()) RETURNING id, created_at`
+	var notifID string
+	var createdAt time.Time
+	err := s.db.QueryRow(ctx, q, userID, title, message, typ).Scan(&notifID, &createdAt)
+	if err != nil {
+		log.Printf("[Review Server] failed to create DB notification: %v", err)
+		return
+	}
+
+	_ = s.pubsubRepo.Publish(ctx, "ws:rooms", websocket.WSEvent{
+		Type:   "notification",
+		RoomID: "user:" + userID,
+		Payload: map[string]interface{}{
+			"id":        notifID,
+			"userId":    userID,
+			"title":     title,
+			"message":   message,
+			"type":      typ,
+			"isRead":    false,
+			"createdAt": createdAt.Format(time.RFC3339),
+		},
+	})
 }

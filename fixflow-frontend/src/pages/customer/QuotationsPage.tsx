@@ -18,13 +18,44 @@ const getStatusBadgeStyles = (status: string) => {
     case 'CounterOffered':
       return 'bg-amber-50 text-amber-700 border-amber-200'
     case 'Accepted':
-      return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      return 'bg-emerald-50 text-emerald-705 border-emerald-200'
+    case 'Preparing':
+      return 'bg-blue-50 text-blue-700 border-blue-200 animate-pulse'
+    case 'Dispatched':
+      return 'bg-amber-50 text-amber-705 border-amber-200'
+    case 'Delivered':
+      return 'bg-slate-100 text-slate-700 border-slate-300'
     case 'Rejected':
       return 'bg-rose-50 text-rose-700 border-rose-200'
     case 'Expired':
     default:
       return 'bg-slate-100 text-slate-600 border-slate-200'
   }
+}
+
+const parseNotes = (notesStr?: string) => {
+  if (!notesStr) return { isBulk: false, isPickup: false, displayNotes: '', bulkItems: [] }
+  const isPickup = notesStr.includes('[Mode: Self-Pickup]')
+  let cleanNotes = notesStr.replace('[Mode: Self-Pickup]', '').trim()
+  
+  const isBulk = cleanNotes.startsWith('[Bulk BOM Request]')
+  let bulkItems: Array<{ id: string; name: string; qty: number; price: number }> = []
+  if (isBulk) {
+    try {
+      const jsonStart = cleanNotes.indexOf('[')
+      const contentAfterPrefix = cleanNotes.substring('[Bulk BOM Request]'.length).trim()
+      const jsonEnd = contentAfterPrefix.indexOf(']')
+      if (jsonEnd !== -1) {
+        const jsonStr = contentAfterPrefix.substring(0, jsonEnd + 1)
+        bulkItems = JSON.parse(jsonStr)
+        const rest = contentAfterPrefix.substring(jsonEnd + 1).trim()
+        cleanNotes = rest.replace(/^\|\s*Project Notes:\s*/, '').trim()
+      }
+    } catch (e) {
+      console.error('Failed to parse bulk BOM items:', e)
+    }
+  }
+  return { isBulk, isPickup, displayNotes: cleanNotes, bulkItems }
 }
 
 const QuotationsPage = () => {
@@ -72,7 +103,7 @@ const QuotationsPage = () => {
               }}
               className="cursor-pointer flex flex-col gap-0.5 text-xs font-semibold text-slate-800 hover:underline"
             >
-              <span>Supplier quoted Rs.{payload.price} for {payload.materialName}</span>
+              <span>Supplier quoted Rs.{payload.price}</span>
               <span className="text-[10px] text-blue-500 font-bold">Click here to view quote card</span>
             </div>
           ),
@@ -138,6 +169,7 @@ const QuotationsPage = () => {
           {quotations.map((q) => {
             const isQuoted = q.status === 'Quoted'
             const offeredPrice = q.offeredPrice ?? 0
+            const { isBulk, isPickup, displayNotes, bulkItems } = parseNotes(q.notes)
 
             return (
               <div
@@ -148,32 +180,94 @@ const QuotationsPage = () => {
                 }`}
               >
                 {/* Product details */}
-                <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500 border">
+                <div className="flex items-start gap-4 flex-1 min-w-0">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500 border mt-1">
                     <Package className="h-6 w-6" />
                   </div>
 
-                  <div className="space-y-1">
-                    <h4 className="font-semibold text-slate-800 text-base">{q.materialName}</h4>
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="font-semibold text-slate-800 text-base truncate">
+                        {isBulk ? '📋 Bulk Project Bidding Request' : q.materialName}
+                      </h4>
+                      {isPickup ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-[10px] font-bold text-amber-700">
+                          🛍️ Self-Pickup
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 border border-sky-200 px-2.5 py-0.5 text-[10px] font-bold text-sky-700">
+                          🚚 Delivery
+                        </span>
+                      )}
+                      {isBulk && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 border border-purple-200 px-2.5 py-0.5 text-[10px] font-bold text-purple-700">
+                          📦 Project BOM
+                        </span>
+                      )}
+                    </div>
+
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 font-medium">
-                      <span className="font-semibold text-slate-700">Qty: {q.requestedQty} units</span>
+                      {!isBulk && <span className="font-semibold text-slate-700">Qty: {q.requestedQty} units</span>}
+                      {isBulk && <span className="font-semibold text-slate-700">{bulkItems.length} items total</span>}
                       <span>•</span>
                       <span className="inline-flex items-center gap-1">
                         <User className="h-3.5 w-3.5" /> Supplier: {q.supplierId ? 'ID ' + q.supplierId.substring(0, 8) : 'Distributor'}
                       </span>
                     </div>
 
+                    {/* Bulk BOM table */}
+                    {isBulk && bulkItems.length > 0 && (
+                      <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/50 max-w-xl">
+                        <table className="min-w-full divide-y divide-slate-200 text-left text-xs">
+                          <thead className="bg-slate-100/80 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                            <tr>
+                              <th className="px-3 py-2">Material</th>
+                              <th className="px-3 py-2 text-right">Qty</th>
+                              <th className="px-3 py-2 text-right">Unit Price</th>
+                              <th className="px-3 py-2 text-right">Est. Subtotal</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-150 text-slate-650 font-medium">
+                            {bulkItems.map((item) => (
+                              <tr key={item.id} className="hover:bg-slate-100/50">
+                                <td className="px-3 py-2 font-semibold text-slate-800">{item.name}</td>
+                                <td className="px-3 py-2 text-right">{item.qty}</td>
+                                <td className="px-3 py-2 text-right">Rs. {item.price.toFixed(2)}</td>
+                                <td className="px-3 py-2 text-right font-semibold text-slate-900">
+                                  Rs. {(item.price * item.qty).toFixed(2)}
+                                </td>
+                              </tr>
+                            ))}
+                            <tr className="bg-slate-105/40 font-bold text-slate-900">
+                              <td colSpan={3} className="px-3 py-2 text-right text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                                Est. Total
+                              </td>
+                              <td className="px-3 py-2 text-right text-xs font-extrabold">
+                                Rs. {bulkItems.reduce((sum, item) => sum + item.price * item.qty, 0).toFixed(2)}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
                     {isQuoted && (
                       <div className="pt-2 flex flex-col gap-1">
                         <span className="text-sm font-bold text-emerald-600">
-                          Offered Price: Rs. {offeredPrice.toFixed(2)}
-                          <span className="text-xs text-slate-500 font-medium ml-1">
-                            (Total: Rs. {(offeredPrice * q.requestedQty).toFixed(2)})
-                          </span>
+                          {isBulk ? (
+                            `Offered Package Price: Rs. ${offeredPrice.toFixed(2)}`
+                          ) : (
+                            <>
+                              Offered Price: Rs. {offeredPrice.toFixed(2)}
+                              <span className="text-xs text-slate-500 font-medium ml-1">
+                                (Total: Rs. {(offeredPrice * q.requestedQty).toFixed(2)})
+                              </span>
+                            </>
+                          )}
                         </span>
                         {q.deliveryDate && (
                           <span className="text-xs text-slate-600 font-medium">
-                            Delivers by: {formatDate(q.deliveryDate)}
+                            {isPickup ? 'Ready for pickup by' : 'Delivers by'}: {formatDate(q.deliveryDate)}
                           </span>
                         )}
                       </div>
@@ -181,11 +275,18 @@ const QuotationsPage = () => {
 
                     {q.status === 'CounterOffered' && (
                       <p className="text-xs font-bold text-amber-600 pt-2">
-                        You countered with price: Rs. {q.counterPrice?.toFixed(2)}
+                        You countered with price: Rs. {q.counterPrice?.toFixed(2)} {isBulk && '(Package Total)'}
                       </p>
                     )}
 
-                    <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-2">
+                    {displayNotes && (
+                      <p className="text-xs italic bg-slate-50 border rounded-lg px-2.5 py-1.5 text-slate-600 mt-2 max-w-md">
+                        <span className="font-bold text-[9px] uppercase tracking-wider block text-slate-400 not-italic">Client Notes:</span>
+                        "{displayNotes}"
+                      </p>
+                    )}
+
+                    <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-2.5">
                       <Clock className="h-3 w-3" />
                       <span>Requested {formatTimeAgo(q.requestedAt)}</span>
                     </div>
@@ -274,6 +375,7 @@ const CounterOfferModal = ({
 }) => {
   const [price, setPrice] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const isBulk = quotation.notes ? quotation.notes.includes('[Bulk BOM Request]') : false
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -298,26 +400,28 @@ const CounterOfferModal = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-      <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-xl border border-slate-100">
+      <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-xl border border-slate-100 animate-fade-in">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
+          className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 cursor-pointer"
         >
           <X className="h-5 w-5" />
         </button>
 
-        <h3 className="text-lg font-bold text-slate-800 mb-4">Counter Quote price</h3>
+        <h3 className="text-lg font-bold text-slate-800 mb-4">Counter Quote Price</h3>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-xs font-semibold text-slate-600 block mb-1">Your Counter Price (Rs. per unit)</label>
+            <label className="text-xs font-semibold text-slate-600 block mb-1">
+              {isBulk ? 'Your Counter Package Price (Rs.)' : 'Your Counter Price (Rs. per unit)'}
+            </label>
             <input
               type="number"
               step="0.01"
               required
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              placeholder={`Quoted price: Rs. ${quotation.offeredPrice}`}
+              placeholder={isBulk ? `Quoted package total: Rs. ${quotation.offeredPrice}` : `Quoted price: Rs. ${quotation.offeredPrice}`}
               className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none"
             />
           </div>
@@ -326,14 +430,14 @@ const CounterOfferModal = ({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 focus:outline-none"
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 focus:outline-none cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
             >
               {isSubmitting ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

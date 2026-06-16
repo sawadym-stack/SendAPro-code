@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { User, Mail, Phone, Calendar, CheckSquare, Square, Save, Loader2, Sparkles } from 'lucide-react'
+import { User, Mail, Phone, Calendar, CheckSquare, Square, Save, Loader2, Sparkles, Camera, Star } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import technicianService from '../../services/technician.service'
+import authService from '../../services/auth.service'
+import api from '../../services/api'
 import ReviewsSection from './ReviewsSection'
 import { toast } from 'react-hot-toast'
 import type { Technician } from '../../types'
@@ -10,18 +12,70 @@ import type { Technician } from '../../types'
 const AVAILABLE_SKILLS = [
   'Electrician',
   'Plumber',
-  'AC Repair',
-  'Appliance Repair',
-  'Carpenter',
-  'Painter',
-  'Mason',
-  'Cleaning'
+  'AC Repair'
 ]
 
 export default function ProfilePage() {
   const qc = useQueryClient()
-  const { user } = useAuthStore()
+  const { user, setAuth, token, role, refreshToken } = useAuthStore()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isUploading, setIsUploading] = useState(false)
   const [selectedSkills, setSelectedSkills] = useState<string[]>([])
+  const [imageError, setImageError] = useState(false)
+
+  // Fetch full user record including profile picture and phone
+  const { data: profileUser, refetch: refetchUser } = useQuery({
+    queryKey: ['user-profile-me'],
+    queryFn: () => authService.getMe(),
+  })
+
+  const currentUser = profileUser ?? user
+
+  const initials = (currentUser?.name ?? 'User')
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2)
+
+  const triggerUpload = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image exceeds 5MB limit')
+      return
+    }
+
+    const formData = new FormData()
+    formData.append('file', file)
+
+    setIsUploading(true)
+    try {
+      const res = await api.post<{ imageUrl: string }>('/users/me/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      })
+      
+      const newUrl = res.data.imageUrl
+      setImageError(false)
+      if (user) {
+        const updated = { ...user, profilePictureUrl: newUrl }
+        setAuth(updated, token!, role!, refreshToken)
+      }
+      toast.success('Profile picture updated successfully!')
+      refetchUser()
+    } catch (err: any) {
+      toast.error('Failed to upload profile picture')
+    } finally {
+      setIsUploading(false)
+    }
+  }
 
   // Fetch technician details
   const { data: tech, isLoading, isError } = useQuery<Technician>({
@@ -92,18 +146,45 @@ export default function ProfilePage() {
         {/* Left Column: Bio Card */}
         <div className="md:col-span-1 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
           <div className="flex flex-col items-center text-center">
-            <div className="w-20 h-20 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-2xl font-black text-sky-400 mb-4 shadow-lg shadow-sky-500/5">
-              {user?.name
-                ?.split(' ')
-                .map((n) => n[0])
-                .join('')
-                .toUpperCase()
-                .slice(0, 2) || 'TE'}
+            <div 
+              onClick={triggerUpload}
+              className="relative w-20 h-20 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-2xl font-black text-sky-400 mb-4 shadow-lg shadow-sky-500/5 cursor-pointer overflow-hidden group transition-all"
+              title="Click to change profile photo"
+            >
+              {isUploading ? (
+                <Loader2 className="animate-spin text-sky-400 h-6 w-6" />
+              ) : currentUser?.profilePictureUrl && !imageError ? (
+                <img 
+                  src={currentUser.profilePictureUrl} 
+                  alt="Profile" 
+                  className="w-full h-full object-cover"
+                  onError={() => setImageError(true)}
+                />
+              ) : (
+                initials
+              )}
+              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <Camera className="text-white h-5 w-5" />
+              </div>
             </div>
-            <h2 className="text-lg font-bold text-slate-100">{user?.name}</h2>
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleFileChange} 
+              accept="image/*" 
+              className="hidden" 
+            />
+            <h2 className="text-lg font-bold text-slate-100">{currentUser?.name}</h2>
             <span className="text-xs bg-sky-500/10 text-sky-400 border border-sky-500/20 px-2.5 py-1 rounded-full font-bold uppercase tracking-wider mt-1">
               Technician
             </span>
+            <div className="flex items-center gap-1.5 mt-2 bg-slate-800/60 border border-slate-700/50 px-2.5 py-1 rounded-lg w-fit">
+              <Star size={12} className="fill-current text-yellow-400 shrink-0" />
+              <span className="text-xs font-bold text-slate-200">
+                {(tech?.rating ?? tech?.avgRating ?? 0) > 0 ? (tech.rating ?? tech.avgRating)!.toFixed(1) : 'N/A'}
+              </span>
+              <span className="text-xs text-slate-500 font-medium">({tech?.reviewCount ?? 0} reviews)</span>
+            </div>
           </div>
 
           <div className="border-t border-slate-800/80 pt-6 space-y-4 text-sm">
@@ -111,7 +192,7 @@ export default function ProfilePage() {
               <Mail className="text-slate-500" size={16} />
               <div className="overflow-hidden">
                 <p className="text-xs text-slate-500 font-semibold">Email Address</p>
-                <p className="text-slate-300 truncate">{user?.email}</p>
+                <p className="text-slate-300 truncate">{currentUser?.email}</p>
               </div>
             </div>
 
@@ -119,7 +200,7 @@ export default function ProfilePage() {
               <Phone className="text-slate-500" size={16} />
               <div>
                 <p className="text-xs text-slate-500 font-semibold">Phone Number</p>
-                <p className="text-slate-300">{user?.phone || 'Not provided'}</p>
+                <p className="text-slate-300">{tech?.phone || currentUser?.phone || 'Not provided'}</p>
               </div>
             </div>
 
@@ -128,7 +209,7 @@ export default function ProfilePage() {
               <div>
                 <p className="text-xs text-slate-500 font-semibold">Member Since</p>
                 <p className="text-slate-300">
-                  {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}
+                  {currentUser?.createdAt ? new Date(currentUser.createdAt).toLocaleDateString() : 'N/A'}
                 </p>
               </div>
             </div>

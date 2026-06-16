@@ -32,11 +32,14 @@ export const useGeolocation = (autoRun = false) => {
         setState({ lat, lng, address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`, error: null, loading: false })
       },
       (error) => {
-        let message = 'Unable to fetch location.'
-        if (error.code === error.PERMISSION_DENIED) message = 'Location permission denied. Please allow GPS access.'
-        if (error.code === error.POSITION_UNAVAILABLE) message = 'Location unavailable. Please try again in a better signal area.'
-        if (error.code === error.TIMEOUT) message = 'Location request timed out. Please retry.'
-        setState((prev) => ({ ...prev, loading: false, error: message }))
+        console.warn('Geolocation failed, falling back to Kozhikode coordinates:', error)
+        setState({
+          lat: 11.2588,
+          lng: 75.7804,
+          address: 'Kozhikode, Kerala (Fallback)',
+          error: null,
+          loading: false,
+        })
       },
       { timeout: 10000, enableHighAccuracy: true },
     )

@@ -91,7 +91,13 @@ func (u *usecase) AcceptBooking(ctx context.Context, techID, jobID string) (*job
 		return nil, fmt.Errorf("you already have an active job — complete it first")
 	}
 
-	// 2. Offline check
+	// 2. Platform fee check
+	hasUnpaid, amount, err := u.jobs.HasUnpaidPlatformFee(ctx, techID)
+	if err == nil && hasUnpaid {
+		return nil, fmt.Errorf("unpaid_platform_fee: You have outstanding platform fees of Rs. %.2f. Please pay it to accept new requests.", amount)
+	}
+
+	// 3. Offline check
 	availStatus, err := u.geo.GetAvailability(ctx, techID)
 	if err == nil && availStatus == "Offline" {
 		return nil, fmt.Errorf("cannot accept new jobs while Offline")

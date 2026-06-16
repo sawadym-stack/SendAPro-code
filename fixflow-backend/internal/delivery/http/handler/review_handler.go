@@ -89,7 +89,31 @@ func (h *ReviewHandler) GetReviews(c *fiber.Ctx) error {
 		HasPrev:    page > 1,
 	}
 
-	return response.Paginated(c, resp.Reviews, meta)
+	// Convert protobuf reviews to camelCase maps for the frontend
+	reviewsList := make([]fiber.Map, 0, len(resp.Reviews))
+	for _, r := range resp.Reviews {
+		item := fiber.Map{
+			"id":           r.Id,
+			"jobId":        r.JobId,
+			"reviewerId":   r.ReviewerId,
+			"revieweeId":   r.RevieweeId,
+			"reviewerName": r.ReviewerName,
+			"rating":       r.Rating,
+			"comment":      r.Comment,
+			"imageUrls":    r.ImageUrls,
+			"createdAt":    r.CreatedAt,
+		}
+		reviewsList = append(reviewsList, item)
+	}
+
+	return c.Status(200).JSON(fiber.Map{
+		"success":       true,
+		"reviews":       reviewsList,
+		"total":         resp.Total,
+		"averageRating": resp.AverageRating,
+		"totalRatings":  resp.TotalRatings,
+		"meta":          meta,
+	})
 }
 
 func (h *ReviewHandler) GetRating(c *fiber.Ctx) error {

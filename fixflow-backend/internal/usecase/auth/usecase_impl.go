@@ -36,6 +36,7 @@ type Usecase interface {
 	RejectRequest(ctx context.Context, approvalID, adminID, reason string) error
 	GetUsers(ctx context.Context, search, role string) ([]*user.User, error)
 	UpdateUserStatus(ctx context.Context, userID string, suspended bool) error
+	GetByID(ctx context.Context, id string) (*user.User, error)
 }
 
 type usecase struct {
@@ -446,4 +447,8 @@ func (uc *usecase) GetUsers(ctx context.Context, search, role string) ([]*user.U
 
 func (uc *usecase) UpdateUserStatus(ctx context.Context, userID string, suspended bool) error {
 	return uc.repo.UpdateSuspensionStatus(ctx, userID, suspended)
+}
+
+func (uc *usecase) GetByID(ctx context.Context, id string) (*user.User, error) {
+	return uc.repo.GetByID(ctx, id)
 }

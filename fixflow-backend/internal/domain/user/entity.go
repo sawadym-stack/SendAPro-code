@@ -25,6 +25,7 @@ type User struct {
 	IsEmailVerified     bool       `json:"isEmailVerified"`
 	IsPhoneVerified     bool       `json:"isPhoneVerified"`
 	IsSuspended         bool       `json:"isSuspended"`
+	ProfilePictureURL   string     `json:"profilePictureUrl"`
 	CreatedAt           time.Time  `json:"createdAt"`
 	UpdatedAt           time.Time  `json:"updatedAt"`
 }

@@ -56,13 +56,14 @@ func (r *SupplierRepository) CreateSupplier(ctx context.Context, s domain.Suppli
 func (r *SupplierRepository) GetSupplier(ctx context.Context, supplierID string) (domain.Supplier, error) {
 	q := `SELECT 
 		id, user_id, COALESCE(business_name, ''), COALESCE(contact_phone, ''), COALESCE(contact_email, ''), 
-		location, service_radius_km, avg_rating, review_count, is_verified, created_at
+		COALESCE(ST_Y(location::geometry), 0) as lat, COALESCE(ST_X(location::geometry), 0) as lng,
+		service_radius_km, avg_rating, review_count, is_verified, created_at
 	FROM suppliers WHERE id = $1`
 
 	var s domain.Supplier
 	err := r.db.QueryRow(ctx, q, supplierID).Scan(
 		&s.ID, &s.UserID, &s.BusinessName, &s.ContactPhone, &s.ContactEmail,
-		&s.Location, &s.ServiceRadiusKm, &s.Rating, &s.ReviewCount, &s.IsVerified, &s.CreatedAt,
+		&s.Lat, &s.Lng, &s.ServiceRadiusKm, &s.Rating, &s.ReviewCount, &s.IsVerified, &s.CreatedAt,
 	)
 
 	if err != nil {
@@ -72,21 +73,23 @@ func (r *SupplierRepository) GetSupplier(ctx context.Context, supplierID string)
 		return domain.Supplier{}, err
 	}
 
-	s.Lat = s.Location.P.Y
-	s.Lng = s.Location.P.X
+	s.Location.P.X = s.Lng
+	s.Location.P.Y = s.Lat
+	s.Location.Valid = true
 	return s, nil
 }
 
 func (r *SupplierRepository) GetSupplierByUserID(ctx context.Context, userID string) (domain.Supplier, error) {
 	q := `SELECT 
 		id, user_id, COALESCE(business_name, ''), COALESCE(contact_phone, ''), COALESCE(contact_email, ''), 
-		location, service_radius_km, avg_rating, review_count, is_verified, created_at
+		COALESCE(ST_Y(location::geometry), 0) as lat, COALESCE(ST_X(location::geometry), 0) as lng,
+		service_radius_km, avg_rating, review_count, is_verified, created_at
 	FROM suppliers WHERE user_id = $1`
 
 	var s domain.Supplier
 	err := r.db.QueryRow(ctx, q, userID).Scan(
 		&s.ID, &s.UserID, &s.BusinessName, &s.ContactPhone, &s.ContactEmail,
-		&s.Location, &s.ServiceRadiusKm, &s.Rating, &s.ReviewCount, &s.IsVerified, &s.CreatedAt,
+		&s.Lat, &s.Lng, &s.ServiceRadiusKm, &s.Rating, &s.ReviewCount, &s.IsVerified, &s.CreatedAt,
 	)
 
 	if err != nil {
@@ -96,8 +99,9 @@ func (r *SupplierRepository) GetSupplierByUserID(ctx context.Context, userID str
 		return domain.Supplier{}, err
 	}
 
-	s.Lat = s.Location.P.Y
-	s.Lng = s.Location.P.X
+	s.Location.P.X = s.Lng
+	s.Location.P.Y = s.Lat
+	s.Location.Valid = true
 	return s, nil
 }
 
@@ -124,7 +128,8 @@ func (r *SupplierRepository) UpdateSupplier(ctx context.Context, s domain.Suppli
 
 func (r *SupplierRepository) GetNearby(ctx context.Context, lat, lng, radiusKm float64, category string) ([]domain.Supplier, error) {
 	q := `SELECT s.id, s.user_id, COALESCE(s.business_name, u.full_name), COALESCE(s.contact_phone, u.phone), COALESCE(s.contact_email, u.email), 
-		s.location, s.service_radius_km, s.avg_rating, s.review_count, s.is_verified, s.created_at,
+		COALESCE(ST_Y(s.location::geometry), 0) as lat, COALESCE(ST_X(s.location::geometry), 0) as lng,
+		s.service_radius_km, s.avg_rating, s.review_count, s.is_verified, s.created_at,
 		ST_Distance(s.location::geography, ST_MakePoint($2, $1)::geography) / 1000 as distance_km
 	FROM suppliers s
 	JOIN users u ON u.id = s.user_id
@@ -155,14 +160,15 @@ func (r *SupplierRepository) GetNearby(ctx context.Context, lat, lng, radiusKm f
 		var dist float64
 		err := rows.Scan(
 			&s.ID, &s.UserID, &s.BusinessName, &s.ContactPhone, &s.ContactEmail,
-			&s.Location, &s.ServiceRadiusKm, &s.Rating, &s.ReviewCount, &s.IsVerified, &s.CreatedAt,
+			&s.Lat, &s.Lng, &s.ServiceRadiusKm, &s.Rating, &s.ReviewCount, &s.IsVerified, &s.CreatedAt,
 			&dist,
 		)
 		if err != nil {
 			return nil, err
 		}
-		s.Lat = s.Location.P.Y
-		s.Lng = s.Location.P.X
+		s.Location.P.X = s.Lng
+		s.Location.P.Y = s.Lat
+		s.Location.Valid = true
 		result = append(result, s)
 	}
 
@@ -172,7 +178,8 @@ func (r *SupplierRepository) GetNearby(ctx context.Context, lat, lng, radiusKm f
 func (r *SupplierRepository) GetAll(ctx context.Context) ([]domain.Supplier, error) {
 	q := `SELECT 
 		id, user_id, COALESCE(business_name, ''), COALESCE(contact_phone, ''), COALESCE(contact_email, ''), 
-		location, service_radius_km, avg_rating, review_count, is_verified, created_at
+		COALESCE(ST_Y(location::geometry), 0) as lat, COALESCE(ST_X(location::geometry), 0) as lng,
+		service_radius_km, avg_rating, review_count, is_verified, created_at
 	FROM suppliers`
 
 	rows, err := r.db.Query(ctx, q)
@@ -186,13 +193,14 @@ func (r *SupplierRepository) GetAll(ctx context.Context) ([]domain.Supplier, err
 		var s domain.Supplier
 		err := rows.Scan(
 			&s.ID, &s.UserID, &s.BusinessName, &s.ContactPhone, &s.ContactEmail,
-			&s.Location, &s.ServiceRadiusKm, &s.Rating, &s.ReviewCount, &s.IsVerified, &s.CreatedAt,
+			&s.Lat, &s.Lng, &s.ServiceRadiusKm, &s.Rating, &s.ReviewCount, &s.IsVerified, &s.CreatedAt,
 		)
 		if err != nil {
 			return nil, err
 		}
-		s.Lat = s.Location.P.Y
-		s.Lng = s.Location.P.X
+		s.Location.P.X = s.Lng
+		s.Location.P.Y = s.Lat
+		s.Location.Valid = true
 		result = append(result, s)
 	}
 

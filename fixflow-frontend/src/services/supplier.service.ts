@@ -79,10 +79,19 @@ const supplierService = {
     limit?: number
   }): Promise<{ materials: Material[]; totalCount: number }> {
     try {
-      const response = await api.get<{ materials: Material[]; totalCount: number }>('/suppliers/materials', {
+      const response = await api.get<any>('/suppliers/materials', {
         params: filters,
       })
-      return response.data
+      if (response.data && response.data.success && Array.isArray(response.data.data)) {
+        return {
+          materials: response.data.data,
+          totalCount: response.data.meta?.total ?? response.data.data.length,
+        }
+      }
+      return {
+        materials: response.data?.materials || response.data?.data || (Array.isArray(response.data) ? response.data : []),
+        totalCount: response.data?.totalCount || response.data?.meta?.total || 0,
+      }
     } catch (error) {
       throw toApiError(error)
     }
@@ -260,12 +269,18 @@ const supplierService = {
     offset?: number
   }): Promise<{ quotations: Quotation[]; total: number }> {
     try {
-      const response = await api.get<{ quotations: Quotation[]; totalCount: number }>('/quotations', {
+      const response = await api.get<any>('/quotations', {
         params: filters,
       })
+      if (response.data && response.data.success && Array.isArray(response.data.data)) {
+        return {
+          quotations: response.data.data,
+          total: response.data.meta?.total ?? response.data.data.length,
+        }
+      }
       return {
-        quotations: response.data.quotations,
-        total: response.data.totalCount,
+        quotations: response.data?.quotations || response.data?.data || (Array.isArray(response.data) ? response.data : []),
+        total: response.data?.totalCount || response.data?.meta?.total || 0,
       }
     } catch (error) {
       throw toApiError(error)

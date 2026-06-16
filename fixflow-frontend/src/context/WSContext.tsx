@@ -16,7 +16,7 @@ export const WSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const token = useAuthStore((s) => s.token)
   const user = useAuthStore((s) => s.user)
-  const ws = useWebSocket()
+  const { connect: wsConnect, disconnect: wsDisconnect, on: wsOn, off: wsOff, isConnected } = useWebSocket()
   
   const defaultRoomRef = useRef<string>('')
   
@@ -32,43 +32,49 @@ export const WSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   useEffect(() => {
     if (isAuthenticated && token && defaultRoomRef.current) {
       console.log('[WS Context] Auto-connecting to default user room:', defaultRoomRef.current)
-      ws.connect(defaultRoomRef.current, token)
+      wsConnect(defaultRoomRef.current, token)
     } else {
       console.log('[WS Context] User unauthenticated, disconnecting WebSocket...')
-      ws.disconnect()
+      wsDisconnect()
     }
 
     return () => {
-      ws.disconnect()
+      wsDisconnect()
     }
-  }, [isAuthenticated, token, user?.id])
+  }, [isAuthenticated, token, user?.id, wsConnect, wsDisconnect])
 
   // 2. Wrap connect/disconnect to implement room switching fallbacks
+  const connect = React.useCallback((room: string, token: string) => {
+    wsConnect(room, token)
+  }, [wsConnect])
+
+  const disconnect = React.useCallback(() => {
+    const activeToken = useAuthStore.getState().token
+    if (useAuthStore.getState().isAuthenticated && activeToken && defaultRoomRef.current) {
+      console.log('[WS Context] Page disconnected custom room. Reconnecting to default user room:', defaultRoomRef.current)
+      wsConnect(defaultRoomRef.current, activeToken)
+    } else {
+      wsDisconnect()
+    }
+  }, [wsConnect, wsDisconnect])
+
+  const on = React.useCallback((eventType: string, handler: Function) => {
+    wsOn(eventType, handler)
+  }, [wsOn])
+
+  const off = React.useCallback((eventType: string, handler: Function) => {
+    wsOff(eventType, handler)
+  }, [wsOff])
+
   const value = React.useMemo(() => {
     return {
-      connect: (room: string, token: string) => {
-        ws.connect(room, token)
-      },
-      disconnect: () => {
-        // If a page disconnects, check if the session is still active
-        // If so, fall back to the default user room so notifications continue
-        const activeToken = useAuthStore.getState().token
-        if (useAuthStore.getState().isAuthenticated && activeToken && defaultRoomRef.current) {
-          console.log('[WS Context] Page disconnected custom room. Reconnecting to default user room:', defaultRoomRef.current)
-          ws.connect(defaultRoomRef.current, activeToken)
-        } else {
-          ws.disconnect()
-        }
-      },
-      on: (eventType: string, handler: Function) => {
-        ws.on(eventType, handler)
-      },
-      off: (eventType: string, handler: Function) => {
-        ws.off(eventType, handler)
-      },
-      isConnected: ws.isConnected,
+      connect,
+      disconnect,
+      on,
+      off,
+      isConnected,
     }
-  }, [ws.isConnected])
+  }, [connect, disconnect, on, off, isConnected])
 
   return <WSContext.Provider value={value}>{children}</WSContext.Provider>
 }

@@ -25,6 +25,7 @@ func (f *fakeRepo) UpdateStatus(_ context.Context, id string, s jobdomain.JobSta
 func (f *fakeRepo) ListByCustomer(_ context.Context, customerID string, page, pageSize int32) ([]*jobdomain.Job, int32, error) { return nil, 0, nil }
 func (f *fakeRepo) AddJobImage(_ context.Context, jobID string, imageType string, url string) error { return nil }
 func (f *fakeRepo) GetActiveJobByTechnicianID(_ context.Context, techID string) (*jobdomain.Job, error) { return nil, nil }
+func (f *fakeRepo) HasUnpaidPlatformFee(_ context.Context, techID string) (bool, float64, error) { return false, 0, nil }
 
 func TestNearbyAndAcceptBooking(t *testing.T) {
 	repo := &fakeRepo{j: &jobdomain.Job{ID: "j1", CustomerID: "c1", Status: jobdomain.StatusRequested}}

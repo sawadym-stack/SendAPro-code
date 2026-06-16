@@ -154,6 +154,39 @@ func main() {
 		}
 	}
 
+	// Rebuild technicians:geo from DB in case Redis was flushed
+	techRows, err := db.Query(ctx, `
+		SELECT id::text, ST_X(current_location::geometry) as lng, ST_Y(current_location::geometry) as lat, is_available
+		FROM technicians
+		WHERE current_location IS NOT NULL
+	`)
+	if err == nil {
+		defer techRows.Close()
+		countTechs := 0
+		for techRows.Next() {
+			var tid string
+			var lng, lat float64
+			var isAvailable bool
+			if err := techRows.Scan(&tid, &lng, &lat, &isAvailable); err == nil {
+				_ = rdb.GeoAdd(ctx, "technicians:geo", &redis.GeoLocation{
+					Name:      tid,
+					Longitude: lng,
+					Latitude:  lat,
+				}).Err()
+				_ = rdb.HSet(ctx, "tech:location:"+tid, "lat", fmt.Sprintf("%f", lat), "lng", fmt.Sprintf("%f", lng)).Err()
+				status := "Offline"
+				if isAvailable {
+					status = "Online"
+				}
+				_ = rdb.HSet(ctx, "tech:availability:"+tid, "status", status).Err()
+				countTechs++
+			}
+		}
+		log.Printf("Rebuilt %d technician locations and statuses in Redis from database.\n", countTechs)
+	} else {
+		log.Printf("Warning: Failed to query technicians for Redis rebuild: %v\n", err)
+	}
+
 	// Start quotation expiry worker running every 10 minutes
 	go func() {
 		ticker := time.NewTicker(10 * time.Minute)
@@ -213,6 +246,7 @@ func main() {
 	}
 
 	app := fiber.New(fiber.Config{
+		BodyLimit: 20 * 1024 * 1024, // 20MB
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
 			var e *fiber.Error
@@ -243,7 +277,7 @@ func main() {
 	uploadHandler := jobhttp.NewUploadHandler(s3Client, jobRepository, chatRepository, db)
 	chatHandler := jobhttp.NewChatHandler(chatRepository, pubsubRepo, db)
 	supplierHandler := jobhttp.NewSupplierHandler(db, supplierRepository, materialRepository, quotationRepository, rdb, pubsubRepo, fcmClient, s3Client)
-	paymentHandler := jobhttp.NewPaymentHandler(paymentService, paymentRepository, razorpayClient, fcmClient, pubsubRepo)
+	paymentHandler := jobhttp.NewPaymentHandler(paymentService, paymentRepository, razorpayClient, fcmClient, pubsubRepo, db)
 	reviewHandler := jobhttp.NewReviewHandler(reviewService)
 	disputeHandler := jobhttp.NewDisputeHandler(disputeService, db)
 	notificationHandler := jobhttp.NewNotificationHandler(notificationService, db)
@@ -274,12 +308,14 @@ func main() {
 	api.Post("/jobs/:id/reject", middleware.RequireRoleFiber("technician", "admin"), matchingHandler.RejectBooking)
 	api.Post("/technicians/location", middleware.RequireRoleFiber("technician", "admin"), matchingHandler.UpdateTechnicianLocation)
 	api.Get("/technicians/me", middleware.RequireRoleFiber("technician", "admin"), matchingHandler.GetTechnicianMe)
-	api.Patch("/technicians/availability", middleware.RequireRoleFiber("technician", "admin"), matchingHandler.UpdateTechnicianAvailability)
 	api.Get("/technicians/requests", middleware.RequireRoleFiber("technician", "admin"), matchingHandler.GetIncomingRequests)
+	api.Get("/technicians/:id", middleware.RequireRoleFiber("customer", "technician", "admin"), matchingHandler.GetTechnicianProfile)
+	api.Patch("/technicians/availability", middleware.RequireRoleFiber("technician", "admin"), matchingHandler.UpdateTechnicianAvailability)
 	api.Put("/technicians/skills", middleware.RequireRoleFiber("technician", "admin"), matchingHandler.UpdateTechnicianSkills)
 	api.Post("/chat/rooms/:id/upload", uploadHandler.ChatUpload)
 	api.Post("/jobs/:id/images", uploadHandler.JobImages)
 	api.Post("/users/me/upload", uploadHandler.UserUpload)
+	api.Get("/users/me", authHandler.GetMe)
 	api.Get("/chat/rooms/:jobId/messages", chatHandler.GetMessages)
 	api.Get("/chat/rooms/:jobId", chatHandler.GetRoomInfo)
 	api.Post("/chat/rooms/:id/messages", chatHandler.PostMessage)
@@ -292,8 +328,8 @@ func main() {
 	api.Get("/suppliers/nearby", supplierHandler.GetNearbySuppliers)
 	api.Get("/suppliers/me/stats", supplierHandler.GetStats)
 
-	// Material routes (supplier only via RBAC)
-	api.Get("/suppliers/materials", middleware.RequireRoleFiber("supplier", "admin"), supplierHandler.ListMaterials)
+	// Material routes (supplier, customer, technician, admin)
+	api.Get("/suppliers/materials", middleware.RequireRoleFiber("supplier", "customer", "technician", "admin"), supplierHandler.ListMaterials)
 	api.Post("/suppliers/materials", middleware.RequireRoleFiber("supplier", "admin"), supplierHandler.AddMaterial)
 	api.Patch("/suppliers/materials/:id", middleware.RequireRoleFiber("supplier", "admin"), supplierHandler.UpdateMaterial)
 	api.Delete("/suppliers/materials/:id", middleware.RequireRoleFiber("supplier", "admin"), supplierHandler.DeleteMaterial)
@@ -314,9 +350,15 @@ func main() {
 	// Payment routes
 	api.Post("/payments/invoice", middleware.RequireRoleFiber("technician", "admin"), paymentHandler.GenerateInvoice)
 	api.Get("/payments/invoice/:jobId", middleware.RequireRoleFiber("customer", "technician", "admin"), paymentHandler.GetInvoice)
+	api.Post("/payments/invoice/:jobId/remind", middleware.RequireRoleFiber("technician", "admin"), paymentHandler.SendInvoiceReminder)
 	api.Post("/payments/order", middleware.RequireRoleFiber("customer", "admin"), paymentHandler.CreatePaymentOrder)
 	api.Post("/payments/verify", middleware.RequireRoleFiber("customer", "admin"), paymentHandler.VerifyAndCapture)
 	api.Get("/payments/history", middleware.RequireRoleFiber("customer", "technician", "admin"), paymentHandler.GetHistory)
+	api.Get("/technicians/platform-fee/pending", middleware.RequireRoleFiber("technician", "admin"), paymentHandler.GetPendingPlatformFees)
+	api.Post("/technicians/platform-fee/pay", middleware.RequireRoleFiber("technician", "admin"), paymentHandler.PayPlatformFee)
+	api.Post("/technicians/platform-fee/verify", middleware.RequireRoleFiber("technician", "admin"), paymentHandler.VerifyPlatformFee)
+	api.Get("/technicians/rewards/status", middleware.RequireRoleFiber("technician", "admin"), paymentHandler.GetRewardsStatus)
+	api.Post("/technicians/rewards/claim", middleware.RequireRoleFiber("technician", "admin"), paymentHandler.ClaimReward)
 
 	// Emergency & Scheduled Job routes
 	api.Post("/jobs/emergency", middleware.RequireRoleFiber("customer", "admin"), jobHandler.CreateEmergency)
@@ -433,6 +475,16 @@ func ensureSchema(ctx context.Context, db *pgxpool.Pool, rdb *redis.Client) {
 			sqlFile:    "009_user_suspension.up.sql",
 			logMsg:     "Checking 009_user_suspension migration...",
 		},
+		{
+			checkQuery: "SELECT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'technician_platform_fees')",
+			sqlFile:    "010_platform_fees_and_rewards.up.sql",
+			logMsg:     "Checking 010_platform_fees_and_rewards migration...",
+		},
+		{
+			checkQuery: "SELECT EXISTS (SELECT FROM information_schema.columns WHERE table_name='users' AND column_name='profile_picture_url')",
+			sqlFile:    "011_add_profile_picture_url.up.sql",
+			logMsg:     "Checking 011_add_profile_picture_url migration...",
+		},
 	}
 
 	for _, m := range migrations {
@@ -467,6 +519,9 @@ func ensureSchema(ctx context.Context, db *pgxpool.Pool, rdb *redis.Client) {
 	}
 
 	_, _ = db.Exec(ctx, "ALTER TABLE quotations ADD COLUMN IF NOT EXISTS delivery_photo_url TEXT")
+	_, _ = db.Exec(ctx, "ALTER TABLE materials ALTER COLUMN unit DROP NOT NULL")
+	_, _ = db.Exec(ctx, "ALTER TABLE materials ALTER COLUMN unit SET DEFAULT 'pcs'")
+
 
 	// Migrate statuses and constraints to PascalCase
 	log.Println("Migrating database statuses and constraints to PascalCase...")

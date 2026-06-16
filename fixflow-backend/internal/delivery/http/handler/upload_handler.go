@@ -239,6 +239,11 @@ func (h *UploadHandler) UserUpload(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to sign url"})
 	}
 
+	_, err = h.db.Exec(ctx, `UPDATE users SET profile_picture_url = $1, updated_at = NOW() WHERE id = $2`, imageUrl, userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to save profile picture to database"})
+	}
+
 	return c.JSON(fiber.Map{
 		"imageUrl":     imageUrl,
 		"presignedUrl": presignedURL,

@@ -40,12 +40,12 @@ func GenerateInvoicePDF(invoice paymentdomain.Invoice, customerPhone string, job
 	// Right: "INVOICE" label + Invoice ID + Date
 	m.AddRow(25,
 		col.New(6).Add(
-			text.New("FIXFLOW", props.Text{
+			text.New("SendAPro", props.Text{
 				Style: fontstyle.Bold,
 				Size:  20,
 				Color: blueColor,
 			}),
-			text.New("Home Repair Services", props.Text{
+			text.New("On-Demand Professional Services", props.Text{
 				Size:  10,
 				Top:   9,
 				Color: greyColor,
@@ -220,18 +220,18 @@ func GenerateInvoicePDF(invoice paymentdomain.Invoice, customerPhone string, job
 	// Right: QR code to verify
 	m.AddRow(22,
 		col.New(8).Add(
-			text.New("Thank you for using FixFlow!", props.Text{
+			text.New("Thank you for using SendAPro!", props.Text{
 				Size:  10,
 				Style: fontstyle.Bold,
 				Color: navyColor,
 			}),
-			text.New("For support: support@fixflow.in", props.Text{
+			text.New("For support: zendaproo@gmail.com", props.Text{
 				Size:  9,
 				Top:   6,
 				Color: greyColor,
 			}),
 		),
-		code.NewQrCol(4, fmt.Sprintf("https://fixflow.in/verify/invoice/%s", invoice.JobID), props.Rect{
+		code.NewQrCol(4, fmt.Sprintf("https://sendapro.com/verify/invoice/%s", invoice.JobID), props.Rect{
 			Center:  true,
 			Percent: 100,
 		}),

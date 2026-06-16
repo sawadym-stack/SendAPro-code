@@ -67,7 +67,7 @@ func GenerateReportPDF(reportType string, from, to time.Time, data interface{}) 
 	// 1. Title Row
 	m.AddRow(20,
 		col.New(6).Add(
-			text.New("FIXFLOW SYSTEM REPORT", props.Text{
+			text.New("SENDAPRO SYSTEM REPORT", props.Text{
 				Style: fontstyle.Bold,
 				Size:  16,
 				Color: blueColor,
@@ -79,7 +79,7 @@ func GenerateReportPDF(reportType string, from, to time.Time, data interface{}) 
 			}),
 		),
 		col.New(6).Add(
-			text.New("FIXFLOW OPERATIONS", props.Text{
+			text.New("SENDAPRO OPERATIONS", props.Text{
 				Style: fontstyle.Bold,
 				Size:  12,
 				Align: align.Right,

@@ -10,7 +10,7 @@ import { Button, Alert } from '../../components/ui'
 
 const adminLoginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  password: z.string().min(4, 'Password must be at least 4 characters'),
 })
 
 type AdminLoginFormValues = z.infer<typeof adminLoginSchema>
@@ -59,9 +59,9 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-950 flex items-stretch font-sans text-neutral-200 selection:bg-red-500 selection:text-white">
+    <div className="min-h-screen bg-neutral-950 flex items-stretch font-sans text-neutral-200 selection:bg-red-500 selection:text-white overflow-x-hidden">
       {/* Centered Login Form Card */}
-      <div className="w-full flex flex-col justify-center items-center p-6 sm:p-12 md:p-16 relative">
+      <div className="w-full flex flex-col justify-center items-center p-6 sm:p-12 md:p-16 relative overflow-hidden">
         <div className="absolute top-20 left-10 w-72 h-72 rounded-full bg-red-900/10 blur-[120px] pointer-events-none" />
         <div className="absolute bottom-20 right-10 w-72 h-72 rounded-full bg-red-900/10 blur-[120px] pointer-events-none" />
 

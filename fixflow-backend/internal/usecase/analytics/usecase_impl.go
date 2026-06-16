@@ -223,7 +223,7 @@ func (u *usecase) GetTopTechnicians(ctx context.Context, limit int) ([]analytics
 		SELECT
 			t.id, u.name, COALESCE(u.avatar_url, ''),
 			COUNT(j.id) FILTER (WHERE j.status='Completed') as completed_jobs,
-			t.rating,
+			t.avg_rating,
 			COALESCE(SUM(p.amount) FILTER (WHERE p.status='Captured'), 0) as revenue,
 			COALESCE(
 				AVG(EXTRACT(EPOCH FROM (j.accepted_at - j.created_at))/60)
@@ -233,7 +233,7 @@ func (u *usecase) GetTopTechnicians(ctx context.Context, limit int) ([]analytics
 		JOIN users u ON u.id = t.user_id
 		LEFT JOIN jobs j ON j.technician_id = t.id
 		LEFT JOIN payments p ON p.job_id = j.id
-		GROUP BY t.id, u.name, u.avatar_url, t.rating
+		GROUP BY t.id, u.name, u.avatar_url, t.avg_rating
 		ORDER BY completed_jobs DESC
 		LIMIT $1
 	`, limit)
@@ -269,12 +269,12 @@ func (u *usecase) GetSupplierAnalytics(ctx context.Context, supplierID string) (
 	err = u.db.QueryRow(ctx, `
 		SELECT
 			COUNT(*) as total,
-			COUNT(*) FILTER (WHERE status='Accepted') as accepted,
+			COUNT(*) FILTER (WHERE status IN ('Accepted', 'Preparing', 'Dispatched', 'Delivered')) as accepted,
 			COUNT(*) FILTER (WHERE status='Rejected') as rejected,
 			COUNT(*) FILTER (WHERE status='Expired') as expired,
 			COALESCE(
 				SUM(offered_price * requested_qty)
-				FILTER (WHERE status='Accepted'
+				FILTER (WHERE status IN ('Accepted', 'Preparing', 'Dispatched', 'Delivered')
 					AND DATE_TRUNC('month',responded_at) = DATE_TRUNC('month',now())),
 				0
 			) as revenue_this_month
@@ -300,7 +300,7 @@ func (u *usecase) GetSupplierAnalytics(ctx context.Context, supplierID string) (
 			COALESCE(SUM(q.offered_price * q.requested_qty), 0) as revenue
 		FROM materials m
 		LEFT JOIN quotations q ON q.material_id = m.id
-			AND q.status = 'Accepted'
+			AND q.status IN ('Accepted', 'Preparing', 'Dispatched', 'Delivered')
 		WHERE m.supplier_id = $1
 		AND m.is_deleted = false
 		GROUP BY m.id, m.name, m.category

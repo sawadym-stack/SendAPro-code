@@ -34,13 +34,14 @@ func (h *JobHandler) Register(r fiber.Router) {
 
 func (h *JobHandler) CreateJob(c *fiber.Ctx) error {
 	var req struct {
-		CustomerID  string  `json:"customerId" validate:"required"`
-		ServiceType string  `json:"serviceType" validate:"required"`
-		Description string  `json:"description" validate:"required,min=10"`
-		Lat         float64 `json:"lat" validate:"required,indialat"`
-		Lng         float64 `json:"lng" validate:"required,indialng"`
-		Urgency     string  `json:"urgency"`
-		IsEmergency bool    `json:"isEmergency"`
+		CustomerID   string  `json:"customerId" validate:"required"`
+		ServiceType  string  `json:"serviceType" validate:"required"`
+		Description  string  `json:"description" validate:"required,min=10"`
+		Lat          float64 `json:"lat" validate:"required,indialat"`
+		Lng          float64 `json:"lng" validate:"required,indialng"`
+		Urgency      string  `json:"urgency"`
+		IsEmergency  bool    `json:"isEmergency"`
+		TechnicianID string  `json:"technicianId"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return err
@@ -53,24 +54,34 @@ func (h *JobHandler) CreateJob(c *fiber.Ctx) error {
 			"details": details,
 		})
 	}
-	j, err := h.uc.CreateJob(c.UserContext(), req.CustomerID, req.ServiceType, req.Description, req.Lat, req.Lng, req.Urgency, req.IsEmergency)
+	j, err := h.uc.CreateJob(c.UserContext(), req.CustomerID, req.ServiceType, req.Description, req.Lat, req.Lng, req.Urgency, req.IsEmergency, req.TechnicianID)
 	if err != nil {
 		return err
 	}
 
 	// Notify nearby technicians
-	if ActiveWSHandler != nil && h.matchingUC != nil {
+	if ActiveWSHandler != nil {
 		go func() {
 			ctx := context.Background()
-			techs, err := h.matchingUC.NearbyTechnicians(ctx, req.Lat, req.Lng, req.ServiceType, 50.0, 20)
-			if err == nil {
-				for _, tech := range techs {
-					userID, err := ActiveWSHandler.GetTechUserID(ctx, tech.TechnicianID)
-					if err == nil {
-						_ = ActiveWSHandler.SendToRoom(ctx, "user:"+userID, map[string]interface{}{
-							"type": "booking_request",
-							"job":  j,
-						})
+			if req.TechnicianID != "" {
+				userID, err := ActiveWSHandler.GetTechUserID(ctx, req.TechnicianID)
+				if err == nil {
+					_ = ActiveWSHandler.SendToRoom(ctx, "user:"+userID, map[string]interface{}{
+						"type": "booking_request",
+						"job":  j,
+					})
+				}
+			} else if h.matchingUC != nil {
+				techs, err := h.matchingUC.NearbyTechnicians(ctx, req.Lat, req.Lng, req.ServiceType, 50.0, 20)
+				if err == nil {
+					for _, tech := range techs {
+						userID, err := ActiveWSHandler.GetTechUserID(ctx, tech.TechnicianID)
+						if err == nil {
+							_ = ActiveWSHandler.SendToRoom(ctx, "user:"+userID, map[string]interface{}{
+								"type": "booking_request",
+								"job":  j,
+							})
+						}
 					}
 				}
 			}

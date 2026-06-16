@@ -15,28 +15,39 @@ export default function ReviewsSection({ technicianId, compact = false }: Review
   const [allReviews, setAllReviews] = useState<Review[]>([])
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
 
-  // Reset reviews when technicianId changes
+  // Reset page and clear reviews when technicianId changes
   useEffect(() => {
     setAllReviews([])
     setPage(1)
   }, [technicianId])
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['reviews', technicianId, page],
     queryFn: () => reviewService.getReviews(technicianId, page, 10),
     enabled: !!technicianId,
   })
 
-  // Append new reviews as they are paginated
+  console.error('ReviewsSection Debug:', { technicianId, page, data, isLoading, error })
+
+  // Synchronize loaded reviews
   useEffect(() => {
-    if (data?.reviews) {
-      setAllReviews((prev) => {
-        const existingIds = new Set(prev.map((r) => r.id))
-        const uniqueNew = data.reviews.filter((r) => !existingIds.has(r.id))
-        return [...prev, ...uniqueNew]
-      })
+    if (!technicianId) {
+      setAllReviews([])
+      return
     }
-  }, [data])
+
+    if (data?.reviews) {
+      if (page === 1) {
+        setAllReviews(data.reviews)
+      } else {
+        setAllReviews((prev) => {
+          const existingIds = new Set(prev.map((r) => r.id))
+          const uniqueNew = data.reviews.filter((r) => !existingIds.has(r.id))
+          return [...prev, ...uniqueNew]
+        })
+      }
+    }
+  }, [data, technicianId, page])
 
   const avgRating = data?.averageRating ?? 0
   const totalCount = data?.total ?? 0

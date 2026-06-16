@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import { MapPin, MessageCircle, FileCheck, Upload, Navigation, Wrench, CheckCircle2, Loader2, Zap, Droplet, Wind, Package, Phone, User } from 'lucide-react'
+import { toast } from 'react-hot-toast'
 import jobService from '../../services/job.service'
 import technicianService from '../../services/technician.service'
 import chatService from '../../services/chat.service'
+import paymentService from '../../services/payment.service'
 import { JobStatus } from '../../types'
 import { formatDate } from '../../utils/formatters'
 import { useWS } from '../../context/WSContext'
@@ -30,17 +32,48 @@ const steps = [
 const ActiveJobPage = () => {
   const { jobId = '' } = useParams()
   const navigate = useNavigate()
+  const qc = useQueryClient()
+
+  useEffect(() => {
+    if (jobId) {
+      qc.invalidateQueries({ queryKey: ['chatRoom', jobId] })
+    }
+  }, [jobId, qc])
+
   const { data: job, refetch, isLoading, isError } = useQuery({
     queryKey: ['job', jobId],
     queryFn: () => jobService.getJob(jobId),
     enabled: Boolean(jobId),
   })
+
+  const { data: invoice } = useQuery({
+    queryKey: ['invoice', jobId],
+    queryFn: () => paymentService.getInvoice(jobId),
+    enabled: Boolean(jobId) && job?.status === JobStatus.Completed,
+    retry: false,
+  })
+
+  const sendReminderMutation = useMutation({
+    mutationFn: () => paymentService.sendInvoiceReminder(jobId),
+    onSuccess: () => {
+      toast.success('Payment reminder sent to customer successfully!')
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to send payment reminder')
+    }
+  })
+
+  const showReminderBtn = invoice && job && !job.isPaid && (() => {
+    const createdTime = new Date(invoice.createdAt).getTime()
+    const nowTime = new Date().getTime()
+    return nowTime - createdTime >= 30 * 60 * 1000
+  })()
   const [beforeFiles, setBeforeFiles] = useState<File[]>([])
   const [afterFiles, setAfterFiles] = useState<File[]>([])
   
   const token = useAuthStore((s) => s.token)
   const user = useAuthStore((s) => s.user)
-  const ws = useWS()
+  const { connect, disconnect, on, off } = useWS()
   const [unreadCount, setUnreadCount] = useState(0)
 
   const { data: chatRoom } = useQuery({
@@ -58,21 +91,25 @@ const ActiveJobPage = () => {
   useEffect(() => {
     if (!token || !jobId) return
 
-    ws.connect(`job:${jobId}`, token)
+    connect(`job:${jobId}`, token)
 
     const handleNewMessage = (payload: any) => {
       if (payload.senderId !== user?.id) {
         setUnreadCount((c) => c + 1)
+        qc.setQueryData(['chatRoom', jobId], (old: any) => {
+          if (!old) return old
+          return { ...old, unreadCount: (old.unreadCount ?? 0) + 1 }
+        })
       }
     }
 
-    ws.on('new_message', handleNewMessage)
+    on('new_message', handleNewMessage)
 
     return () => {
-      ws.off('new_message', handleNewMessage)
-      ws.disconnect()
+      off('new_message', handleNewMessage)
+      disconnect()
     }
-  }, [token, jobId, ws, user?.id])
+  }, [token, jobId, connect, disconnect, on, off, user?.id, qc])
 
   const patchStatus = useMutation({
     mutationFn: (status: JobStatus) => technicianService.patchJobStatus(jobId, status),
@@ -195,7 +232,14 @@ const ActiveJobPage = () => {
 
           <div className="grid grid-cols-2 gap-3 pt-2">
             <button
-              onClick={() => navigate(`/technician/chat/${job.id}`)}
+              onClick={() => {
+                setUnreadCount(0)
+                qc.setQueryData(['chatRoom', job.id], (old: any) => {
+                  if (!old) return old
+                  return { ...old, unreadCount: 0 }
+                })
+                navigate(`/technician/chat/${job.id}`)
+              }}
               className="relative flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-950 text-slate-350 hover:text-white hover:border-slate-700 hover:bg-slate-900 transition duration-300 font-bold text-xs text-center py-2.5 px-3 shadow-md active:scale-95 cursor-pointer"
             >
               <MessageCircle size={15} className="text-sky-400" />
@@ -254,7 +298,14 @@ const ActiveJobPage = () => {
             </button>
           )}
           <button
-            onClick={() => navigate(`/technician/chat/${job.id}`)}
+            onClick={() => {
+              setUnreadCount(0)
+              qc.setQueryData(['chatRoom', job.id], (old: any) => {
+                if (!old) return old
+                return { ...old, unreadCount: 0 }
+              })
+              navigate(`/technician/chat/${job.id}`)
+            }}
             className="relative flex-1 min-w-[100px] flex items-center justify-center gap-2 py-3 rounded-xl border border-slate-800 text-slate-400 text-sm font-semibold hover:border-violet-500/30 hover:text-violet-400 transition-all cursor-pointer"
           >
             <MessageCircle size={16} />
@@ -275,13 +326,34 @@ const ActiveJobPage = () => {
           </button>
 
           {job.status === JobStatus.Completed && (
-            <button
-              onClick={() => navigate(`/technician/invoice/${job.id}`)}
-              className="flex-1 min-w-[100px] flex items-center justify-center gap-2 py-3 rounded-xl border border-slate-800 text-slate-400 text-sm font-semibold hover:border-emerald-500/30 hover:text-emerald-400 transition-all"
-            >
-              <FileCheck size={16} />
-              Invoice
-            </button>
+            invoice ? (
+              <div className="flex flex-col sm:flex-row gap-3 w-full">
+                <button
+                  onClick={() => invoice.pdfUrl && window.open(invoice.pdfUrl, '_blank')}
+                  className="flex-1 min-w-[100px] flex items-center justify-center gap-2 py-3 rounded-xl border border-emerald-500/30 text-emerald-400 text-sm font-semibold hover:bg-emerald-500/10 transition-all cursor-pointer"
+                >
+                  <FileCheck size={16} />
+                  View Invoice
+                </button>
+                {showReminderBtn && (
+                  <button
+                    onClick={() => sendReminderMutation.mutate()}
+                    disabled={sendReminderMutation.isPending}
+                    className="flex-1 min-w-[150px] flex items-center justify-center gap-2 py-3 rounded-xl border border-amber-500/30 bg-amber-500/5 text-amber-400 text-sm font-semibold hover:bg-amber-500/10 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {sendReminderMutation.isPending ? 'Sending...' : 'Send Payment Reminder'}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={() => navigate(`/technician/invoice/${job.id}`)}
+                className="flex-1 min-w-[100px] flex items-center justify-center gap-2 py-3 rounded-xl border border-slate-800 text-slate-400 text-sm font-semibold hover:border-emerald-500/30 hover:text-emerald-400 transition-all cursor-pointer"
+              >
+                <FileCheck size={16} />
+                Generate Invoice
+              </button>
+            )
           )}
         </div>
 

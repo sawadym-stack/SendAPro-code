@@ -6,7 +6,9 @@ import { useWS } from '../../context/WSContext'
 import { useAuthStore } from '../../store/authStore'
 import paymentService from '../../services/payment.service'
 import { InvoiceSummaryCard } from '../../components/payment/InvoiceSummaryCard'
+import { MockPaymentModal } from '../../components/payment/MockPaymentModal'
 import { Button, Card, Alert } from '../../components/ui'
+import { loadRazorpay } from '../../utils/loadRazorpay'
 import type { Invoice } from '../../types'
 
 export const PaymentPage: React.FC = () => {
@@ -19,6 +21,8 @@ export const PaymentPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [isProcessingCheckout, setIsProcessingCheckout] = useState(false)
   const [paymentSuccess, setPaymentSuccess] = useState(false)
+  const [isMockModalOpen, setIsMockModalOpen] = useState(false)
+  const [mockOrderDetails, setMockOrderDetails] = useState<{ orderId: string; amount: number } | null>(null)
 
   // Generate idempotency key for payment order
   const [idempotencyKey] = useState(() => `pay_key_${jobId}_${Date.now()}`)
@@ -66,6 +70,24 @@ export const PaymentPage: React.FC = () => {
     }
   }, [jobId, on, off, invoice])
 
+  const handleMockPaymentSubmit = async (paymentId: string, signature: string) => {
+    if (!mockOrderDetails) return
+    try {
+      await paymentService.verifyPayment({
+        orderId: mockOrderDetails.orderId,
+        paymentId,
+        signature,
+      })
+      setPaymentSuccess(true)
+      toast.success('Payment completed & verified!')
+      setIsMockModalOpen(false)
+      fetchInvoice()
+    } catch (err: any) {
+      console.error('Payment verification failed:', err)
+      throw err
+    }
+  }
+
   const handlePayNow = async () => {
     if (!jobId || !invoice) return
     try {
@@ -77,9 +99,22 @@ export const PaymentPage: React.FC = () => {
         idempotencyKey,
       })
 
-      // 2. Open Razorpay modal
-      if (!window.Razorpay) {
-        toast.error('Razorpay Checkout script not loaded. Please try again.')
+      // Check for Mock mode order
+      if (order.orderId.startsWith('order_mock_')) {
+        setMockOrderDetails({
+          orderId: order.orderId,
+          amount: invoice.total,
+        })
+        setIsMockModalOpen(true)
+        setIsProcessingCheckout(false)
+        return
+      }
+
+      // 2. Load Razorpay SDK on demand and open modal
+      try {
+        await loadRazorpay()
+      } catch {
+        toast.error('Failed to load Razorpay Checkout. Please try again.')
         setIsProcessingCheckout(false)
         return
       }
@@ -298,6 +333,14 @@ export const PaymentPage: React.FC = () => {
           </div>
         )}
       </div>
+      
+      <MockPaymentModal
+        isOpen={isMockModalOpen}
+        onClose={() => setIsMockModalOpen(false)}
+        amount={mockOrderDetails?.amount ?? 0}
+        orderId={mockOrderDetails?.orderId ?? ''}
+        onSubmit={handleMockPaymentSubmit}
+      />
     </div>
   )
 }

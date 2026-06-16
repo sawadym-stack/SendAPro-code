@@ -51,7 +51,7 @@ func (r *ReviewRepository) GetReviews(ctx context.Context, revieweeID string, pa
 		return nil, 0, err
 	}
 
-	q := `SELECT r.id, r.job_id, r.reviewer_id, r.reviewee_id, r.rating, r.comment, r.image_urls, r.created_at, u.name as reviewer_name
+	q := `SELECT r.id, r.job_id, r.reviewer_id, r.reviewee_id, r.rating, r.comment, r.image_urls, r.created_at, u.full_name as reviewer_name
 FROM reviews r
 JOIN users u ON u.id = r.reviewer_id
 WHERE r.reviewee_id = $1

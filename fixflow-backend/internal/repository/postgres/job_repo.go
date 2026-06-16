@@ -17,9 +17,18 @@ type JobRepository struct {
 func NewJobRepository(db *pgxpool.Pool) *JobRepository { return &JobRepository{db: db} }
 
 func (r *JobRepository) Create(ctx context.Context, j *job.Job) error {
+	resolvedTechID := j.TechnicianID
+	if j.TechnicianID != "" {
+		var techID string
+		err := r.db.QueryRow(ctx, `SELECT id FROM technicians WHERE user_id = $1 OR id = $1`, j.TechnicianID).Scan(&techID)
+		if err == nil {
+			resolvedTechID = techID
+		}
+	}
+
 	q := `INSERT INTO jobs (customer_id, technician_id, title, description, status, priority, address, location, is_emergency, scheduled_at, created_at, updated_at)
-VALUES ($1,NULL,$2,$3,$4,$5,'',ST_SetSRID(ST_MakePoint($6,$7),4326)::geography,$8,$9,NOW(),NOW()) RETURNING id, created_at, updated_at`
-	return r.db.QueryRow(ctx, q, j.CustomerID, j.ServiceType, j.Description, domainToDBStatus(j.Status), domainToDBPriority(j.Urgency), j.Longitude, j.Latitude, j.IsEmergency, j.ScheduledAt).Scan(&j.ID, &j.CreatedAt, &j.UpdatedAt)
+VALUES ($1,NULLIF($2,'')::uuid,$3,$4,$5,$6,'',ST_SetSRID(ST_MakePoint($7,$8),4326)::geography,$9,$10,NOW(),NOW()) RETURNING id, created_at, updated_at`
+	return r.db.QueryRow(ctx, q, j.CustomerID, resolvedTechID, j.ServiceType, j.Description, domainToDBStatus(j.Status), domainToDBPriority(j.Urgency), j.Longitude, j.Latitude, j.IsEmergency, j.ScheduledAt).Scan(&j.ID, &j.CreatedAt, &j.UpdatedAt)
 }
 
 func (r *JobRepository) GetByID(ctx context.Context, id string) (*job.Job, error) {
@@ -260,4 +269,26 @@ func (r *JobRepository) AddJobImage(ctx context.Context, jobID string, imageType
 	}
 	_, err := r.db.Exec(ctx, q, url, jobID)
 	return err
+}
+
+func (r *JobRepository) HasUnpaidPlatformFee(ctx context.Context, techID string) (bool, float64, error) {
+	var userUUID string
+	err := r.db.QueryRow(ctx, `
+		SELECT user_id FROM technicians WHERE id = $1 OR user_id = $1
+	`, techID).Scan(&userUUID)
+	if err != nil {
+		userUUID = techID
+	}
+
+	var pendingTotal float64
+	err = r.db.QueryRow(ctx, `
+		SELECT COALESCE(SUM(amount), 0) 
+		FROM technician_platform_fees 
+		WHERE technician_id = $1 AND status = 'Pending'
+	`, userUUID).Scan(&pendingTotal)
+	if err != nil {
+		return false, 0, err
+	}
+
+	return pendingTotal > 0, pendingTotal, nil
 }

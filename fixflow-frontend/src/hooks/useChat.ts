@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import chatService from '../services/chat.service'
 import type { ChatMessage, ChatRoom, SendMessageDto } from '../services/chat.service'
 import { useAuthStore } from '../store/authStore'
@@ -16,9 +17,22 @@ export const useChat = (jobIdInput: string) => {
 
   const user = useAuthStore((s) => s.user)
   const token = useAuthStore((s) => s.token)
-  const ws = useWS()
+  const { connect, disconnect, on, off } = useWS()
+  const queryClient = useQueryClient()
 
   const pendingSendsRef = useRef<Map<string, { data: SendMessageDto; file?: File }>>(new Map())
+
+  // Clean unread count on unmount
+  useEffect(() => {
+    return () => {
+      if (jobId) {
+        queryClient.setQueryData(['chatRoom', jobId], (old: any) => {
+          if (!old) return old
+          return { ...old, unreadCount: 0 }
+        })
+      }
+    }
+  }, [jobId, queryClient])
 
   // Load chat room details and initial history
   useEffect(() => {
@@ -41,6 +55,10 @@ export const useChat = (jobIdInput: string) => {
 
         // Mark read on mount
         await chatService.markRead(chatRoom.id)
+        queryClient.setQueryData(['chatRoom', jobId], (old: any) => {
+          if (!old) return old
+          return { ...old, unreadCount: 0 }
+        })
       } catch (err: any) {
         console.error('[useChat] Failed to initialize chat:', err)
         toast.error('Failed to load chat history')
@@ -56,14 +74,14 @@ export const useChat = (jobIdInput: string) => {
     return () => {
       active = false
     }
-  }, [jobId])
+  }, [jobId, queryClient])
 
   // Subscribe to WS updates
   useEffect(() => {
     if (!token || !jobId || !roomId) return
 
     // Connect to room websocket (job:{jobId})
-    ws.connect(`job:${jobId}`, token)
+    connect(`job:${jobId}`, token)
 
     const handleNewMessage = (payload: any) => {
       const incoming: ChatMessage = {
@@ -104,18 +122,22 @@ export const useChat = (jobIdInput: string) => {
           chatService.markRead(roomId).catch(err => {
             console.error('[useChat] Failed to mark incoming message as read:', err)
           })
+          queryClient.setQueryData(['chatRoom', jobId], (old: any) => {
+            if (!old) return old
+            return { ...old, unreadCount: 0 }
+          })
         }
 
         return [...prev, incoming]
       })
     }
 
-    ws.on('new_message', handleNewMessage)
+    on('new_message', handleNewMessage)
 
     return () => {
-      ws.off('new_message', handleNewMessage)
+      off('new_message', handleNewMessage)
     }
-  }, [token, jobId, roomId, ws, user?.id])
+  }, [token, jobId, roomId, connect, on, off, user?.id, queryClient])
 
   // Load older history (pagination)
   const loadMore = useCallback(async () => {

@@ -41,7 +41,85 @@ func (h *MatchingHandler) NearbyTechnicians(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(fiber.Map{"technicians": techs})
+
+	if len(techs) == 0 {
+		return c.JSON(fiber.Map{"technicians": []interface{}{}})
+	}
+
+	techIDs := make([]string, len(techs))
+	for i, t := range techs {
+		techIDs[i] = t.TechnicianID
+	}
+
+	rows, err := h.db.Query(c.UserContext(), `
+		SELECT t.id::text, u.full_name, t.avg_rating, t.review_count, COALESCE(u.profile_picture_url, '')
+		FROM technicians t
+		JOIN users u ON u.id = t.user_id
+		WHERE t.id::text = ANY($1)
+	`, techIDs)
+
+	type techDetail struct {
+		Name              string  `json:"name"`
+		Rating            float64 `json:"rating"`
+		ReviewCount       int     `json:"reviewCount"`
+		ProfilePictureUrl string  `json:"profilePictureUrl"`
+	}
+
+	details := make(map[string]techDetail)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var tid, name, pic string
+			var rating float64
+			var count int
+			if err := rows.Scan(&tid, &name, &rating, &count, &pic); err == nil {
+				details[tid] = techDetail{
+					Name:              name,
+					Rating:            rating,
+					ReviewCount:       count,
+					ProfilePictureUrl: pic,
+				}
+			}
+		}
+	}
+
+	type enrichedTech struct {
+		TechnicianID      string  `json:"technicianId"`
+		Latitude          float64 `json:"latitude"`
+		Longitude         float64 `json:"longitude"`
+		DistanceKm        float64 `json:"distanceKm"`
+		Name              string  `json:"name"`
+		Rating            float64 `json:"rating"`
+		ReviewCount       int     `json:"reviewCount"`
+		ProfilePictureUrl string  `json:"profilePictureUrl"`
+	}
+
+	responseTechs := make([]enrichedTech, 0, len(techs))
+	for _, t := range techs {
+		detail, exists := details[t.TechnicianID]
+		name := fmt.Sprintf("Technician %s", t.TechnicianID[:8])
+		var rating float64
+		var count int
+		var pic string
+		if exists {
+			name = detail.Name
+			rating = detail.Rating
+			count = detail.ReviewCount
+			pic = detail.ProfilePictureUrl
+		}
+		responseTechs = append(responseTechs, enrichedTech{
+			TechnicianID:      t.TechnicianID,
+			Latitude:          t.Latitude,
+			Longitude:         t.Longitude,
+			DistanceKm:        t.DistanceKm,
+			Name:              name,
+			Rating:            rating,
+			ReviewCount:       count,
+			ProfilePictureUrl: pic,
+		})
+	}
+
+	return c.JSON(fiber.Map{"technicians": responseTechs})
 }
 
 func (h *MatchingHandler) AcceptBooking(c *fiber.Ctx) error {
@@ -249,29 +327,35 @@ func (h *MatchingHandler) GetTechnicianMe(c *fiber.Ctx) error {
 	}
 
 	var tech struct {
-		ID              string   `json:"id"`
-		UserID          string   `json:"userId"`
-		FullName        string   `json:"fullName"`
-		Email           string   `json:"email"`
-		Phone           string   `json:"phone"`
-		Skills          []string `json:"skills"`
-		YearsExperience int      `json:"yearsExperience"`
-		ServiceRadius   float64  `json:"serviceRadiusKm"`
-		IsAvailable     bool     `json:"isAvailable"`
-		AvgRating       float64  `json:"avgRating"`
-		Status          string   `json:"status"`
+		ID                string   `json:"id"`
+		UserID            string   `json:"userId"`
+		FullName          string   `json:"fullName"`
+		Name              string   `json:"name"`
+		Email             string   `json:"email"`
+		Phone             string   `json:"phone"`
+		Skills            []string `json:"skills"`
+		YearsExperience   int      `json:"yearsExperience"`
+		ServiceRadius     float64  `json:"serviceRadiusKm"`
+		IsAvailable       bool     `json:"isAvailable"`
+		AvgRating         float64  `json:"avgRating"`
+		Rating            float64  `json:"rating"`
+		ReviewCount       int      `json:"reviewCount"`
+		Status            string   `json:"status"`
+		ProfilePictureUrl string   `json:"profilePictureUrl"`
 	}
 
-	query := `SELECT t.id, t.user_id, u.full_name, u.email, u.phone, t.skills, t.years_experience, t.service_radius_km, t.is_available, t.avg_rating
+	query := `SELECT t.id, t.user_id, u.full_name, u.email, u.phone, t.skills, t.years_experience, t.service_radius_km, t.is_available, t.avg_rating, t.review_count, COALESCE(u.profile_picture_url, '')
 	          FROM technicians t
 	          JOIN users u ON u.id = t.user_id
 	          WHERE t.user_id = $1`
 	err := h.db.QueryRow(c.UserContext(), query, userID).Scan(
-		&tech.ID, &tech.UserID, &tech.FullName, &tech.Email, &tech.Phone, &tech.Skills, &tech.YearsExperience, &tech.ServiceRadius, &tech.IsAvailable, &tech.AvgRating,
+		&tech.ID, &tech.UserID, &tech.FullName, &tech.Email, &tech.Phone, &tech.Skills, &tech.YearsExperience, &tech.ServiceRadius, &tech.IsAvailable, &tech.AvgRating, &tech.ReviewCount, &tech.ProfilePictureUrl,
 	)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "technician profile not found"})
 	}
+	tech.Name = tech.FullName
+	tech.Rating = tech.AvgRating
 
 	status, err := h.rdb.HGet(c.UserContext(), "tech:availability:"+tech.ID, "status").Result()
 	if err != nil {
@@ -285,6 +369,57 @@ func (h *MatchingHandler) GetTechnicianMe(c *fiber.Ctx) error {
 
 	return c.JSON(tech)
 }
+
+func (h *MatchingHandler) GetTechnicianProfile(c *fiber.Ctx) error {
+	techID := c.Params("id")
+	if techID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "technician id is required"})
+	}
+
+	var tech struct {
+		ID                string   `json:"id"`
+		UserID            string   `json:"userId"`
+		FullName          string   `json:"fullName"`
+		Name              string   `json:"name"`
+		Email             string   `json:"email"`
+		Phone             string   `json:"phone"`
+		Skills            []string `json:"skills"`
+		YearsExperience   int      `json:"yearsExperience"`
+		ServiceRadius     float64  `json:"serviceRadiusKm"`
+		IsAvailable       bool     `json:"isAvailable"`
+		AvgRating         float64  `json:"avgRating"`
+		Rating            float64  `json:"rating"`
+		ReviewCount       int      `json:"reviewCount"`
+		Status            string   `json:"status"`
+		ProfilePictureUrl string   `json:"profilePictureUrl"`
+	}
+
+	query := `SELECT t.id, t.user_id, u.full_name, u.email, u.phone, t.skills, t.years_experience, t.service_radius_km, t.is_available, t.avg_rating, t.review_count, COALESCE(u.profile_picture_url, '')
+	          FROM technicians t
+	          JOIN users u ON u.id = t.user_id
+	          WHERE t.id = $1 OR t.user_id = $1`
+	err := h.db.QueryRow(c.UserContext(), query, techID).Scan(
+		&tech.ID, &tech.UserID, &tech.FullName, &tech.Email, &tech.Phone, &tech.Skills, &tech.YearsExperience, &tech.ServiceRadius, &tech.IsAvailable, &tech.AvgRating, &tech.ReviewCount, &tech.ProfilePictureUrl,
+	)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "technician profile not found"})
+	}
+	tech.Name = tech.FullName
+	tech.Rating = tech.AvgRating
+
+	status, err := h.rdb.HGet(c.UserContext(), "tech:availability:"+tech.ID, "status").Result()
+	if err != nil {
+		if err == redis.Nil {
+			status = "Offline"
+		} else {
+			return err
+		}
+	}
+	tech.Status = status
+
+	return c.JSON(tech)
+}
+
 
 func (h *MatchingHandler) UpdateTechnicianAvailability(c *fiber.Ctx) error {
 	userID, ok := c.Locals("user_id").(string)
@@ -390,6 +525,7 @@ func (h *MatchingHandler) GetIncomingRequests(c *fiber.Ctx) error {
 				WHERE id = $1
 			) t
 			WHERE j.status = 'Requested'
+			  AND (j.technician_id IS NULL OR j.technician_id = $1)
 			  AND j.location IS NOT NULL
 			  AND t.current_location IS NOT NULL
 			  AND ST_DWithin(j.location, t.current_location, $3 * 1000)
@@ -418,6 +554,7 @@ func (h *MatchingHandler) GetIncomingRequests(c *fiber.Ctx) error {
 				WHERE id = $1
 			) t
 			WHERE j.status = 'Requested'
+			  AND (j.technician_id IS NULL OR j.technician_id = $1)
 			  AND j.location IS NOT NULL
 			  AND t.current_location IS NOT NULL
 			  AND ST_DWithin(j.location, t.current_location, $2 * 1000)

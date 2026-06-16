@@ -3,6 +3,7 @@ import type { Job, Technician } from '../types'
 
 const technicianService = {
   getMe: async (): Promise<Technician> => (await api.get<Technician>('/technicians/me')).data,
+  getProfile: async (id: string): Promise<Technician> => (await api.get<Technician>(`/technicians/${id}`)).data,
   updateAvailability: async (status: 'Online' | 'Busy' | 'Offline'): Promise<void> => {
     await api.patch('/technicians/availability', { status })
   },

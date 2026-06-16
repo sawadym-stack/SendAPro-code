@@ -71,11 +71,11 @@ func (r *UserRepository) Create(ctx context.Context, u *user.User) error {
 }
 
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*user.User, error) {
-	q := `SELECT id, full_name, phone, email, password_hash, role, is_verified, COALESCE(approval_status, 'auto_approved'), approval_requested_at, approval_expires_at, is_email_verified, is_phone_verified, is_suspended, created_at, updated_at
+	q := `SELECT id, full_name, phone, email, password_hash, role, is_verified, COALESCE(approval_status, 'auto_approved'), approval_requested_at, approval_expires_at, is_email_verified, is_phone_verified, is_suspended, COALESCE(profile_picture_url, ''), created_at, updated_at
 	      FROM users WHERE id = $1`
 	u := &user.User{}
 	err := r.db.QueryRow(ctx, q, id).Scan(
-		&u.ID, &u.Name, &u.Phone, &u.Email, &u.PasswordHash, &u.Role, &u.IsVerified, &u.ApprovalStatus, &u.ApprovalRequestedAt, &u.ApprovalExpiresAt, &u.IsEmailVerified, &u.IsPhoneVerified, &u.IsSuspended, &u.CreatedAt, &u.UpdatedAt,
+		&u.ID, &u.Name, &u.Phone, &u.Email, &u.PasswordHash, &u.Role, &u.IsVerified, &u.ApprovalStatus, &u.ApprovalRequestedAt, &u.ApprovalExpiresAt, &u.IsEmailVerified, &u.IsPhoneVerified, &u.IsSuspended, &u.ProfilePictureURL, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -87,12 +87,12 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*user.User, er
 }
 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*user.User, error) {
-	q := `SELECT id, full_name, phone, email, password_hash, role, is_verified, COALESCE(approval_status, 'auto_approved'), approval_requested_at, approval_expires_at, is_email_verified, is_phone_verified, is_suspended, created_at, updated_at
+	q := `SELECT id, full_name, phone, email, password_hash, role, is_verified, COALESCE(approval_status, 'auto_approved'), approval_requested_at, approval_expires_at, is_email_verified, is_phone_verified, is_suspended, COALESCE(profile_picture_url, ''), created_at, updated_at
 	      FROM users WHERE email = $1`
 
 	u := &user.User{}
 	err := r.db.QueryRow(ctx, q, email).Scan(
-		&u.ID, &u.Name, &u.Phone, &u.Email, &u.PasswordHash, &u.Role, &u.IsVerified, &u.ApprovalStatus, &u.ApprovalRequestedAt, &u.ApprovalExpiresAt, &u.IsEmailVerified, &u.IsPhoneVerified, &u.IsSuspended, &u.CreatedAt, &u.UpdatedAt,
+		&u.ID, &u.Name, &u.Phone, &u.Email, &u.PasswordHash, &u.Role, &u.IsVerified, &u.ApprovalStatus, &u.ApprovalRequestedAt, &u.ApprovalExpiresAt, &u.IsEmailVerified, &u.IsPhoneVerified, &u.IsSuspended, &u.ProfilePictureURL, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -104,11 +104,11 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*user.Us
 }
 
 func (r *UserRepository) GetByPhone(ctx context.Context, phone string) (*user.User, error) {
-	q := `SELECT id, full_name, phone, email, password_hash, role, is_verified, COALESCE(approval_status, 'auto_approved'), approval_requested_at, approval_expires_at, is_email_verified, is_phone_verified, is_suspended, created_at, updated_at
+	q := `SELECT id, full_name, phone, email, password_hash, role, is_verified, COALESCE(approval_status, 'auto_approved'), approval_requested_at, approval_expires_at, is_email_verified, is_phone_verified, is_suspended, COALESCE(profile_picture_url, ''), created_at, updated_at
 	      FROM users WHERE phone = $1`
 	u := &user.User{}
 	err := r.db.QueryRow(ctx, q, phone).Scan(
-		&u.ID, &u.Name, &u.Phone, &u.Email, &u.PasswordHash, &u.Role, &u.IsVerified, &u.ApprovalStatus, &u.ApprovalRequestedAt, &u.ApprovalExpiresAt, &u.IsEmailVerified, &u.IsPhoneVerified, &u.IsSuspended, &u.CreatedAt, &u.UpdatedAt,
+		&u.ID, &u.Name, &u.Phone, &u.Email, &u.PasswordHash, &u.Role, &u.IsVerified, &u.ApprovalStatus, &u.ApprovalRequestedAt, &u.ApprovalExpiresAt, &u.IsEmailVerified, &u.IsPhoneVerified, &u.IsSuspended, &u.ProfilePictureURL, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -266,6 +266,18 @@ func (r *UserRepository) ApproveRequest(ctx context.Context, approvalID, adminID
 		return "", "", err
 	}
 
+	// 4. Update suppliers table if role is supplier
+	if role == "supplier" {
+		_, err = tx.Exec(ctx, `
+			UPDATE suppliers 
+			SET is_verified = TRUE, updated_at = NOW() 
+			WHERE user_id = $1
+		`, userID)
+		if err != nil {
+			return "", "", err
+		}
+	}
+
 	err = tx.Commit(ctx)
 	if err != nil {
 		return "", "", err
@@ -320,7 +332,7 @@ func (r *UserRepository) GetSupplierGeo(ctx context.Context, userID string, sid 
 }
 
 func (r *UserRepository) GetUsers(ctx context.Context, search, role string) ([]*user.User, error) {
-	q := `SELECT id, full_name, phone, email, password_hash, role, is_verified, COALESCE(approval_status, 'auto_approved'), approval_requested_at, approval_expires_at, is_email_verified, is_phone_verified, is_suspended, created_at, updated_at
+	q := `SELECT id, full_name, phone, email, password_hash, role, is_verified, COALESCE(approval_status, 'auto_approved'), approval_requested_at, approval_expires_at, is_email_verified, is_phone_verified, is_suspended, COALESCE(profile_picture_url, ''), created_at, updated_at
 	      FROM users
 	      WHERE ($1 = '' OR (full_name ILIKE '%' || $1 || '%' OR email ILIKE '%' || $1 || '%' OR phone ILIKE '%' || $1 || '%'))
 	        AND ($2 = '' OR role = $2)
@@ -335,7 +347,7 @@ func (r *UserRepository) GetUsers(ctx context.Context, search, role string) ([]*
 	for rows.Next() {
 		u := &user.User{}
 		err := rows.Scan(
-			&u.ID, &u.Name, &u.Phone, &u.Email, &u.PasswordHash, &u.Role, &u.IsVerified, &u.ApprovalStatus, &u.ApprovalRequestedAt, &u.ApprovalExpiresAt, &u.IsEmailVerified, &u.IsPhoneVerified, &u.IsSuspended, &u.CreatedAt, &u.UpdatedAt,
+			&u.ID, &u.Name, &u.Phone, &u.Email, &u.PasswordHash, &u.Role, &u.IsVerified, &u.ApprovalStatus, &u.ApprovalRequestedAt, &u.ApprovalExpiresAt, &u.IsEmailVerified, &u.IsPhoneVerified, &u.IsSuspended, &u.ProfilePictureURL, &u.CreatedAt, &u.UpdatedAt,
 		)
 		if err != nil {
 			return nil, err

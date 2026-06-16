@@ -32,7 +32,7 @@ func (s *Server) Register(ctx context.Context, req *authv1.RegisterRequest) (*au
 }
 
 func (s *Server) Login(ctx context.Context, req *authv1.LoginRequest) (*authv1.AuthTokensResponse, error) {
-	uid, _, at, rt, aexp, rexp, err := s.uc.Login(ctx, req.GetEmail(), req.GetPassword())
+	uid, role, at, rt, aexp, rexp, err := s.uc.Login(ctx, req.GetEmail(), req.GetPassword())
 	if err != nil {
 		if err.Error() == "invalid credentials" {
 			log.Printf("auth login failed for email=%s: invalid credentials", req.GetEmail())
@@ -40,6 +40,17 @@ func (s *Server) Login(ctx context.Context, req *authv1.LoginRequest) (*authv1.A
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+
+	// Check if technician/supplier needs approval
+	if role == "technician" || role == "supplier" {
+		approvalStatus, err := s.uc.GetApprovalStatus(ctx, uid)
+		if err == nil && approvalStatus == "pending" {
+			return nil, status.Errorf(codes.PermissionDenied, "%s registration pending admin approval", role)
+		} else if err == nil && approvalStatus == "rejected" {
+			return nil, status.Errorf(codes.PermissionDenied, "%s registration was rejected by admin", role)
+		}
+	}
+
 	return &authv1.AuthTokensResponse{UserId: uid, AccessToken: at, RefreshToken: rt, AccessExpiresAtUnix: aexp.Unix(), RefreshExpiresAtUnix: rexp.Unix()}, nil
 }
 

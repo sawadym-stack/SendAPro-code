@@ -66,8 +66,8 @@ export interface PaymentsHistoryResponse {
 const paymentService = {
   async generateInvoice(data: GenerateInvoiceDto): Promise<GenerateInvoiceResponse> {
     try {
-      const response = await api.post<GenerateInvoiceResponse>('/payments/invoice', data)
-      return response.data
+      const response = await api.post<{ success: boolean; data: GenerateInvoiceResponse }>('/payments/invoice', data)
+      return response.data.data
     } catch (error) {
       throw toApiError(error)
     }
@@ -75,8 +75,8 @@ const paymentService = {
 
   async createOrder(data: { jobId: string; idempotencyKey: string }): Promise<CreateOrderResponse> {
     try {
-      const response = await api.post<CreateOrderResponse>('/payments/order', data)
-      return response.data
+      const response = await api.post<{ success: boolean; data: CreateOrderResponse }>('/payments/order', data)
+      return response.data.data
     } catch (error) {
       throw toApiError(error)
     }
@@ -84,8 +84,8 @@ const paymentService = {
 
   async verifyPayment(data: VerifyPaymentDto): Promise<VerifyPaymentResponse> {
     try {
-      const response = await api.post<VerifyPaymentResponse>('/payments/verify', data)
-      return response.data
+      const response = await api.post<{ success: boolean; data: VerifyPaymentResponse }>('/payments/verify', data)
+      return response.data.data
     } catch (error) {
       throw toApiError(error)
     }
@@ -93,8 +93,11 @@ const paymentService = {
 
   async getHistory(params?: { page?: number; limit?: number }): Promise<PaymentsHistoryResponse> {
     try {
-      const response = await api.get<PaymentsHistoryResponse>('/payments/history', { params })
-      return response.data
+      const response = await api.get<{ success: boolean; data: Payment[]; meta: { total: number } }>('/payments/history', { params })
+      return {
+        payments: response.data.data || [],
+        total: response.data.meta?.total || 0,
+      }
     } catch (error) {
       throw toApiError(error)
     }
@@ -103,6 +106,60 @@ const paymentService = {
   async getInvoice(jobId: string): Promise<Invoice> {
     try {
       const response = await api.get<Invoice>(`/payments/invoice/${jobId}`)
+      return response.data
+    } catch (error) {
+      throw toApiError(error)
+    }
+  },
+
+  async sendInvoiceReminder(jobId: string): Promise<any> {
+    try {
+      const response = await api.post(`/payments/invoice/${jobId}/remind`)
+      return response.data
+    } catch (error) {
+      throw toApiError(error)
+    }
+  },
+
+  async getPendingPlatformFees(): Promise<{ pendingAmount: number; fees: any[] }> {
+    try {
+      const response = await api.get<{ pendingAmount: number; fees: any[] }>('/technicians/platform-fee/pending')
+      return response.data
+    } catch (error) {
+      throw toApiError(error)
+    }
+  },
+
+  async payPlatformFee(): Promise<{ orderId: string; amount: number; currency: string; keyId: string }> {
+    try {
+      const response = await api.post<{ orderId: string; amount: number; currency: string; keyId: string }>('/technicians/platform-fee/pay')
+      return response.data
+    } catch (error) {
+      throw toApiError(error)
+    }
+  },
+
+  async verifyPlatformFee(data: VerifyPaymentDto): Promise<VerifyPaymentResponse> {
+    try {
+      const response = await api.post<VerifyPaymentResponse>('/technicians/platform-fee/verify', data)
+      return response.data
+    } catch (error) {
+      throw toApiError(error)
+    }
+  },
+
+  async getRewardsStatus(): Promise<{ jobsCount: number; target: number; canClaim: boolean; claimed: boolean; rewardAmount: number }> {
+    try {
+      const response = await api.get<{ jobsCount: number; target: number; canClaim: boolean; claimed: boolean; rewardAmount: number }>('/technicians/rewards/status')
+      return response.data
+    } catch (error) {
+      throw toApiError(error)
+    }
+  },
+
+  async claimReward(): Promise<{ rewardAmount: number }> {
+    try {
+      const response = await api.post<{ rewardAmount: number }>('/technicians/rewards/claim', {})
       return response.data
     } catch (error) {
       throw toApiError(error)

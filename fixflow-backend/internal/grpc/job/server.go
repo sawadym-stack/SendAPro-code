@@ -24,7 +24,7 @@ func NewServer(uc jobuc.Usecase, matching matchinguc.Usecase) *Server {
 }
 
 func (s *Server) CreateJob(ctx context.Context, req *jobv1.CreateJobRequest) (*jobv1.CreateJobResponse, error) {
-	j, err := s.uc.CreateJob(ctx, req.GetCustomerId(), req.GetServiceType(), req.GetDescription(), req.GetLat(), req.GetLng(), req.GetUrgency(), req.GetIsEmergency())
+	j, err := s.uc.CreateJob(ctx, req.GetCustomerId(), req.GetServiceType(), req.GetDescription(), req.GetLat(), req.GetLng(), req.GetUrgency(), req.GetIsEmergency(), "")
 	if err != nil {
 		return nil, err
 	}

@@ -1,5 +1,6 @@
 import axios, { type AxiosError } from 'axios'
 import type { Role, User } from '../types'
+import api from './api'
 
 interface AuthGatewayResponse {
   user_id?: string
@@ -170,6 +171,11 @@ const authService = {
 
   async verifyOTP(phone: string, otp: string): Promise<{ verified: boolean }> {
     const response = await authApi.post<{ verified: boolean }>('/auth/verify-otp', { phone, otp })
+    return response.data
+  },
+
+  async getMe(): Promise<User> {
+    const response = await api.get<User>('/users/me')
     return response.data
   },
 }

@@ -79,6 +79,21 @@ export const InvoicePage: React.FC = () => {
         const jobData = await jobService.getJob(jobId)
         setJob(jobData)
 
+        // Check if invoice already exists
+        try {
+          const existingInvoice = await paymentService.getInvoice(jobId)
+          if (existingInvoice) {
+            toast.error('Invoice has already been generated for this job.')
+            navigate('/technician/earnings')
+            return
+          }
+        } catch (invoiceErr: any) {
+          // A 404 error is expected when no invoice exists yet
+          if (invoiceErr.statusCode !== 404) {
+            console.error('Error checking existing invoice:', invoiceErr)
+          }
+        }
+
         // Fetch accepted quotations for this job
         const { quotations } = await supplierService.listQuotations({ limit: 100 })
         const acceptedQuotations = quotations.filter(
@@ -103,7 +118,7 @@ export const InvoicePage: React.FC = () => {
     }
 
     fetchData()
-  }, [jobId, setValue])
+  }, [jobId, setValue, navigate])
 
   const onSubmit = async (values: InvoiceFormValues) => {
     if (!jobId) return

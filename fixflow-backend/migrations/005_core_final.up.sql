@@ -48,7 +48,7 @@ CREATE OR REPLACE FUNCTION update_technician_rating()
 RETURNS TRIGGER AS $$
 BEGIN
   UPDATE technicians
-  SET rating = COALESCE((
+  SET avg_rating = COALESCE((
     SELECT ROUND(AVG(rating)::numeric, 2)
     FROM reviews 
     WHERE reviewee_id = NEW.reviewee_id

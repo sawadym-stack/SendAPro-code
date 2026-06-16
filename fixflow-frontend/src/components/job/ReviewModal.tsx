@@ -86,6 +86,11 @@ export default function ReviewModal({
       localStorage.setItem(`reviewed_${jobId}`, 'true')
       toast.success('Review submitted! Thank you.')
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.job(jobId) })
+      queryClient.invalidateQueries({ queryKey: ['reviews'] })
+      queryClient.invalidateQueries({ queryKey: ['technician'] })
+      queryClient.invalidateQueries({ queryKey: ['technician-me'] })
+      queryClient.invalidateQueries({ queryKey: ['technician-stats'] })
+      queryClient.invalidateQueries({ queryKey: ['tech-stats'] })
       onClose()
     } catch (err: any) {
       toast.error(err?.message ?? 'Failed to submit review')

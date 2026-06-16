@@ -10,10 +10,10 @@ import (
 )
 
 type TechnicianLocation struct {
-	TechnicianID string
-	Latitude     float64
-	Longitude    float64
-	DistanceKm   float64
+	TechnicianID string  `json:"technicianId"`
+	Latitude     float64 `json:"latitude"`
+	Longitude    float64 `json:"longitude"`
+	DistanceKm   float64 `json:"distanceKm"`
 }
 
 type GeoRepository struct {
@@ -142,8 +142,6 @@ func (r *GeoRepository) isVerifiedAndMatchesService(ctx context.Context, techID,
 			WHERE LOWER(s) = LOWER($2)
 			   OR (LOWER(s) = 'electrical' AND LOWER($2) = 'electrician')
 			   OR (LOWER(s) = 'plumbing' AND LOWER($2) = 'plumber')
-			   OR (LOWER(s) = 'carpentry' AND LOWER($2) = 'carpenter')
-			   OR (LOWER(s) = 'painting' AND LOWER($2) = 'painter')
 			   OR (
 			       (LOWER(s) = 'ac_repair' OR LOWER(s) = 'ac repair' OR LOWER(s) = 'ac') AND
 			       (LOWER($2) = 'ac_repair' OR LOWER($2) = 'ac repair' OR LOWER($2) = 'ac')

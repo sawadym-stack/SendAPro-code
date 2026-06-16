@@ -145,6 +145,12 @@ func (s *Server) RaiseDispute(ctx context.Context, req *disputev1.RaiseDisputeRe
 		}()
 	}
 
+	// Save persistent notifications for admin and opponent
+	if adminUserID != "" {
+		s.createNotificationHelper(ctx, adminUserID, "New Dispute Raised", fmt.Sprintf("A new dispute was raised for job #%s: %s", shortJobID, req.Reason), "dispute")
+	}
+	s.createNotificationHelper(ctx, againstID, "Dispute Filed Against Job", fmt.Sprintf("A dispute has been raised against job #%s.", shortJobID), "dispute")
+
 	// Publish WS event to admin room
 	_ = s.pubsubRepo.Publish(ctx, "ws:rooms", websocket.WSEvent{
 		Type:   "new_dispute",
@@ -261,6 +267,10 @@ func (s *Server) ResolveDispute(ctx context.Context, req *disputev1.ResolveDispu
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to resolve dispute in database: %v", err)
 	}
+
+	// Save persistent notifications for raiser and opponent
+	s.createNotificationHelper(ctx, disp.RaisedByID, "Dispute Resolved", fmt.Sprintf("Your dispute for job #%s has been resolved: %s. Action: %s.", disp.JobID[0:8], disp.AdminNote, disp.Action), "dispute")
+	s.createNotificationHelper(ctx, disp.AgainstID, "Dispute Resolved", fmt.Sprintf("The dispute for job #%s has been resolved. Action: %s.", disp.JobID[0:8], disp.Action), "dispute")
 
 	// Notify raiser
 	if s.fcmClient != nil {
@@ -379,4 +389,30 @@ func formatTimePtr(t *time.Time) string {
 		return ""
 	}
 	return t.Format(time.RFC3339)
+}
+
+func (s *Server) createNotificationHelper(ctx context.Context, userID, title, message, typ string) {
+	q := `INSERT INTO notifications (user_id, title, message, type, metadata, is_read, created_at) 
+	      VALUES ($1,$2,$3,$4,'{}',false,NOW()) RETURNING id, created_at`
+	var notifID string
+	var createdAt time.Time
+	err := s.db.QueryRow(ctx, q, userID, title, message, typ).Scan(&notifID, &createdAt)
+	if err != nil {
+		log.Printf("[Dispute Server] failed to create DB notification: %v", err)
+		return
+	}
+
+	_ = s.pubsubRepo.Publish(ctx, "ws:rooms", websocket.WSEvent{
+		Type:   "notification",
+		RoomID: "user:" + userID,
+		Payload: map[string]interface{}{
+			"id":        notifID,
+			"userId":    userID,
+			"title":     title,
+			"message":   message,
+			"type":      typ,
+			"isRead":    false,
+			"createdAt": createdAt.Format(time.RFC3339),
+		},
+	})
 }

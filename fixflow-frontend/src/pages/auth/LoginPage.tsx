@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState, useEffect, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -13,7 +13,7 @@ import authBanner from '../../assets/auth_banner.png'
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  password: z.string().min(4, 'Password must be at least 4 characters'),
 })
 
 type LoginFormValues = z.infer<typeof loginSchema>
@@ -53,6 +53,7 @@ const LoginPage = () => {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const setAuth = useAuthStore((state) => state.setAuth)
+  const { isAuthenticated, role: currentRole } = useAuthStore()
 
   const [selectedRole, setSelectedRole] = useState<Role>('customer')
   const [showPassword, setShowPassword] = useState(false)
@@ -70,6 +71,20 @@ const LoginPage = () => {
 
   const redirectPath = useMemo(() => searchParams.get('redirect'), [searchParams])
 
+  useEffect(() => {
+    if (isAuthenticated && currentRole) {
+      if (redirectPath && redirectPath.startsWith(`/${currentRole}`)) {
+        navigate(redirectPath, { replace: true })
+      } else {
+        if (currentRole === 'admin') {
+          navigate('/admin/analytics', { replace: true })
+        } else {
+          navigate(`/${currentRole}/dashboard`, { replace: true })
+        }
+      }
+    }
+  }, [isAuthenticated, currentRole, redirectPath, navigate])
+
   const {
     register,
     handleSubmit,
@@ -82,7 +97,7 @@ const LoginPage = () => {
   })
 
   const goToDashboard = (role: Role) => {
-    if (redirectPath) {
+    if (redirectPath && redirectPath.startsWith(`/${role}`)) {
       navigate(redirectPath)
       return
     }
@@ -136,6 +151,10 @@ const LoginPage = () => {
     setOtpError('')
     try {
       const res = await api.post('/auth/verify-otp', { userId: otpUserId, otp })
+      if (res.data.approvalStatus) {
+        setOtpError(res.data.message || `${res.data.role} registration is ${res.data.approvalStatus} admin approval.`)
+        return
+      }
       const { accessToken, refreshToken } = res.data
       const mockUser = {
         id: otpUserId,
@@ -156,7 +175,7 @@ const LoginPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-950 flex items-stretch font-sans text-neutral-200 selection:bg-sky-500 selection:text-white">
+    <div className="min-h-screen bg-neutral-950 flex items-stretch font-sans text-neutral-200 selection:bg-sky-500 selection:text-white overflow-x-hidden">
       
       {/* Left panel: Telemetry & Premium branding (Desktop only) */}
       <div className="relative hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col justify-between p-12 overflow-hidden">
@@ -247,7 +266,7 @@ const LoginPage = () => {
       </div>
 
       {/* Right panel: Login Form Card */}
-      <div className="w-full lg:w-1/2 xl:w-2/5 flex flex-col justify-center items-center p-6 sm:p-12 md:p-16 relative">
+      <div className="w-full lg:w-1/2 xl:w-2/5 flex flex-col justify-center items-center p-6 sm:p-12 md:p-16 relative overflow-hidden">
         {/* Mobile decorative circles */}
         <div className="absolute top-20 left-10 w-72 h-72 rounded-full bg-sky-900/10 blur-[120px] pointer-events-none lg:hidden" />
         <div className="absolute bottom-20 right-10 w-72 h-72 rounded-full bg-blue-900/10 blur-[120px] pointer-events-none lg:hidden" />

@@ -52,7 +52,7 @@ const AdminLayout = () => {
   return (
     <div className="flex min-h-screen bg-slate-950 text-slate-100">
       <Sidebar items={navigationItems} title="SendAPro Admin" dark={true} />
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto pt-16 md:pt-0">
         <Outlet />
       </main>
     </div>

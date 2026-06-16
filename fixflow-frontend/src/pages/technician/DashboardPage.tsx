@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Zap, Briefcase, Star, Droplet, Wind, Sparkles, Check, Sliders, MapPin, Radio, Navigation, ArrowRight } from 'lucide-react'
+import { Zap, Briefcase, Star, Droplet, Wind, Sparkles, Check, Sliders, MapPin, Radio, Navigation, ArrowRight, Trophy } from 'lucide-react'
+import { toast } from 'react-hot-toast'
 import technicianService from '../../services/technician.service'
 import jobService from '../../services/job.service'
+import paymentService from '../../services/payment.service'
 import { useAuthStore } from '../../store/authStore'
 import { useWebSocket } from '../../hooks/useWebSocket'
 import { formatCurrency, formatDate } from '../../utils/formatters'
@@ -11,6 +13,9 @@ import { JobStatus, type Job } from '../../types'
 import { Button } from '../../components/ui'
 import { useGeolocation } from '../../hooks/useGeolocation'
 import { extractApiError } from '../../services/api'
+import { loadRazorpay } from '../../utils/loadRazorpay'
+import { MockPaymentModal } from '../../components/payment/MockPaymentModal'
+import { ScratchCardModal } from '../../components/technician/ScratchCardModal'
 
 const statuses = ['Online', 'Busy', 'Offline'] as const
 
@@ -229,6 +234,131 @@ const TechnicianDashboardPage = () => {
   const queryClient = useQueryClient()
   const [status, setStatus] = useState<(typeof statuses)[number]>('Offline')
 
+  // Platform fee states
+  const [pendingFee, setPendingFee] = useState(0)
+  const [isFeePayOpen, setIsFeePayOpen] = useState(false)
+  const [feeOrderDetails, setFeeOrderDetails] = useState<{ orderId: string; amount: number; keyId: string } | null>(null)
+
+  // Scoreboard / rewards states
+  const [rewardStatus, setRewardStatus] = useState<{ jobsCount: number; target: number; canClaim: boolean; claimed: boolean; rewardAmount: number } | null>(null)
+  const [isScratchOpen, setIsScratchOpen] = useState(false)
+  const [scratchVal, setScratchVal] = useState(0)
+
+  const fetchPlatformFee = async () => {
+    try {
+      const res = await paymentService.getPendingPlatformFees()
+      setPendingFee(res.pendingAmount)
+    } catch (err) {
+      console.error('Failed to get platform fee:', err)
+    }
+  }
+
+  const fetchRewards = async () => {
+    try {
+      const status = await paymentService.getRewardsStatus()
+      setRewardStatus(status)
+    } catch (err) {
+      console.error('Failed to get rewards:', err)
+    }
+  }
+
+  useEffect(() => {
+    fetchPlatformFee()
+    fetchRewards()
+  }, [])
+
+  const handlePayPlatformFee = async () => {
+    try {
+      const order = await paymentService.payPlatformFee()
+      
+      // Check for Mock mode order
+      if (order.orderId.startsWith('order_mock_')) {
+        setFeeOrderDetails(order)
+        setIsFeePayOpen(true)
+        return
+      }
+
+      // Real Razorpay payment
+      try {
+        await loadRazorpay()
+      } catch {
+        toast.error('Failed to load Razorpay Checkout. Please try again.')
+        return
+      }
+
+      const options = {
+        key: order.keyId,
+        amount: order.amount,
+        currency: order.currency,
+        name: 'SendAPro Services',
+        description: 'Payment of Technician Platform Fee',
+        order_id: order.orderId,
+        theme: {
+          color: '#F59E0B', // Amber-500
+        },
+        prefill: {
+          name: user?.name || '',
+          email: user?.email || '',
+          contact: user?.phone || '',
+        },
+        handler: async (response: any) => {
+          try {
+            await paymentService.verifyPlatformFee({
+              orderId: response.razorpay_order_id,
+              paymentId: response.razorpay_payment_id,
+              signature: response.razorpay_signature,
+            })
+            toast.success('Platform fee paid successfully! Radar unlocked.')
+            fetchPlatformFee()
+            queryClient.invalidateQueries({ queryKey: ['technician-incoming'] })
+          } catch (err: any) {
+            toast.error(err.message || 'Platform fee verification failed')
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            toast.error('Payment cancelled by user')
+          },
+        },
+      }
+
+      const razorpay = new window.Razorpay(options)
+      razorpay.open()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to initialize platform fee payment')
+    }
+  }
+
+  const handleFeePaymentSubmit = async (paymentId: string, signature: string) => {
+    if (!feeOrderDetails) return
+    try {
+      await paymentService.verifyPlatformFee({
+        orderId: feeOrderDetails.orderId,
+        paymentId,
+        signature,
+      })
+      toast.success('Platform fee paid successfully! Radar unlocked.')
+      setIsFeePayOpen(false)
+      setFeeOrderDetails(null)
+      fetchPlatformFee()
+      queryClient.invalidateQueries({ queryKey: ['technician-incoming'] })
+    } catch (err: any) {
+      toast.error('Verification failed. Try again.')
+      throw err
+    }
+  }
+
+  const handleClaimReward = async () => {
+    try {
+      const res = await paymentService.claimReward()
+      setScratchVal(res.rewardAmount)
+      setIsScratchOpen(true)
+      fetchRewards()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to claim scratch card')
+    }
+  }
+
   const token = useAuthStore((s) => s.token)
   const user = useAuthStore((s) => s.user)
   const { connect, disconnect, on, off } = useWebSocket()
@@ -257,9 +387,23 @@ const TechnicianDashboardPage = () => {
     if (!token || !user?.id) return
     connect(`user:${user.id}`, token)
 
-    const bookingHandler = (event: Extract<import('../../types').WSEvent, { type: 'booking_request' }>) => {
+    const bookingHandler = (payload: any) => {
+      if (!payload) return
+      const rawJob = payload.job || payload
+      const mappedJob: Job = {
+        id: rawJob.id || rawJob.jobId || '',
+        customerId: rawJob.customerId || '',
+        serviceType: rawJob.serviceType || rawJob.title || '',
+        description: rawJob.description || '',
+        urgency: rawJob.urgency || 'Normal',
+        isEmergency: !!rawJob.isEmergency,
+        createdAt: rawJob.createdAt || new Date().toISOString(),
+        status: rawJob.status || 'Requested',
+      }
+      if (!mappedJob.id) return
+
       setRequests((prev) => {
-        if (prev.some((r) => r.id === event.job.id)) return prev
+        if (prev.some((r) => r.id === mappedJob.id)) return prev
         // Web audio beep for incoming requests
         try {
           const context = new (window.AudioContext || (window as any).webkitAudioContext)()
@@ -272,7 +416,7 @@ const TechnicianDashboardPage = () => {
           osc.start()
           osc.stop(context.currentTime + 0.15)
         } catch (_) {}
-        return [event.job, ...prev]
+        return [mappedJob, ...prev]
       })
     }
 
@@ -369,7 +513,12 @@ const TechnicianDashboardPage = () => {
   }
 
   const acceptJobMutation = useMutation({
-    mutationFn: (jobId: string) => technicianService.acceptJob(jobId),
+    mutationFn: (jobId: string) => {
+      if (pendingFee > 0) {
+        throw new Error(`You have an outstanding platform fee of Rs. ${pendingFee}. Please pay it before accepting new dispatches.`)
+      }
+      return technicianService.acceptJob(jobId)
+    },
     onSuccess: (job) => {
       queryClient.invalidateQueries({ queryKey: ['technician-jobs'] })
       queryClient.invalidateQueries({ queryKey: ['technician-incoming'] })
@@ -377,7 +526,7 @@ const TechnicianDashboardPage = () => {
     },
     onError: (err: any) => {
       const apiErr = extractApiError(err)
-      alert(apiErr.message)
+      toast.error(apiErr.message || err.message)
     }
   })
 
@@ -468,6 +617,32 @@ const TechnicianDashboardPage = () => {
 
       <div className="container-base mt-8 space-y-8">
         
+        {/* Outstanding Platform Fee Block */}
+        {pendingFee > 0 && (
+          <div className="relative group overflow-hidden rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-950/20 to-yellow-950/20 p-6 backdrop-blur shadow-[0_0_30px_rgba(245,158,11,0.1)]">
+            <div className="absolute top-0 right-0 -mt-8 -mr-8 w-24 h-24 bg-amber-600/10 rounded-full blur-xl animate-pulse" />
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-2 py-0.5 text-xs font-mono font-bold text-amber-400 border border-amber-500/20 animate-pulse">
+                    ⚠️ OUTSTANDING PLATFORM FEE PENDING
+                  </span>
+                </div>
+                <h3 className="text-xl font-black text-white font-display">Your Dispatch Radar is Locked</h3>
+                <p className="text-sm text-slate-300 mt-1 max-w-xl">
+                  You have an outstanding platform fee of <span className="font-bold text-amber-450 font-mono text-base">Rs. {pendingFee.toFixed(2)}</span> (8% of labor charge from your completed job). Please pay the fee to unlock accepting new bookings.
+                </p>
+              </div>
+              <Button
+                onClick={handlePayPlatformFee}
+                className="bg-amber-600 hover:bg-amber-700 text-white font-black px-6 py-3 rounded-xl flex-1 md:flex-none justify-center gap-2 shadow-lg shadow-amber-500/10 active:scale-95 transition-all"
+              >
+                💳 Pay Platform Fee
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Active Job Alert / On-Duty Deployed Block */}
         {activeJob && (
           <div className="relative group overflow-hidden rounded-2xl border border-red-500/40 bg-gradient-to-r from-red-950/20 to-rose-950/20 p-6 backdrop-blur shadow-[0_0_30px_rgba(239,68,68,0.1)]">
@@ -744,6 +919,59 @@ const TechnicianDashboardPage = () => {
               </div>
             </div>
 
+            {/* Weekly Score Board Card */}
+            {rewardStatus && (
+              <div className="rounded-3xl bg-slate-900/20 border border-slate-900 p-6 backdrop-blur-xl relative overflow-hidden group mt-6">
+                <div className="absolute top-0 right-0 -mt-10 -mr-10 w-24 h-24 bg-emerald-600/5 rounded-full blur-2xl" />
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400">
+                    <Trophy size={18} />
+                  </div>
+                  <div>
+                    <h2 className="text-md font-black text-white uppercase tracking-wider font-display">Weekly Score Board</h2>
+                    <p className="text-[10px] text-slate-500 font-mono mt-0.5">Complete 10 jobs to claim scratch card</p>
+                  </div>
+                </div>
+
+                <div className="mt-5 space-y-4">
+                  {/* Progress bar */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs font-mono text-slate-400">
+                      <span>Weekly Progress</span>
+                      <span className="font-bold text-white">{rewardStatus.jobsCount} / {rewardStatus.target} Jobs</span>
+                    </div>
+                    <div className="w-full bg-slate-950/60 border border-slate-900 rounded-full h-3 overflow-hidden p-0.5">
+                      <div 
+                        className="bg-gradient-to-r from-emerald-500 to-teal-500 h-full rounded-full transition-all duration-500" 
+                        style={{ width: `${Math.min((rewardStatus.jobsCount / rewardStatus.target) * 100, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {rewardStatus.claimed ? (
+                    <div className="p-4 border border-emerald-500/20 bg-emerald-500/5 rounded-2xl text-center space-y-1">
+                      <p className="text-[10px] text-emerald-450 font-bold uppercase tracking-wider font-mono">Completed & Claimed</p>
+                      <p className="text-md font-black text-white font-mono">Won Rs. {rewardStatus.rewardAmount}</p>
+                    </div>
+                  ) : rewardStatus.canClaim ? (
+                    <Button
+                      onClick={handleClaimReward}
+                      fullWidth
+                      className="bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-600 hover:to-amber-600 border-none font-black py-3 text-white shadow-lg shadow-yellow-500/25 animate-pulse"
+                    >
+                      🎁 Claim Scratch Card
+                    </Button>
+                  ) : (
+                    <div className="p-4 bg-slate-950/40 border border-slate-900 rounded-2xl text-center">
+                      <p className="text-xs text-slate-500 font-mono">
+                        Complete {rewardStatus.target - rewardStatus.jobsCount} more job{rewardStatus.target - rewardStatus.jobsCount === 1 ? '' : 's'} this week to unlock card
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
           </div>
 
         </div>
@@ -805,6 +1033,19 @@ const TechnicianDashboardPage = () => {
         </div>
 
       </div>
+
+      <MockPaymentModal
+        isOpen={isFeePayOpen}
+        onClose={() => setIsFeePayOpen(false)}
+        amount={pendingFee}
+        orderId={feeOrderDetails?.orderId ?? ''}
+        onSubmit={handleFeePaymentSubmit}
+      />
+      <ScratchCardModal
+        isOpen={isScratchOpen}
+        onClose={() => setIsScratchOpen(false)}
+        rewardAmount={scratchVal}
+      />
     </div>
   )
 }

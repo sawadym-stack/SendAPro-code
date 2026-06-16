@@ -19,6 +19,7 @@ export interface User {
   role: Role
   createdAt: string
   updatedAt?: string
+  profilePictureUrl?: string
 }
 
 export interface Job {
@@ -54,12 +55,16 @@ export interface Technician {
   id: string
   userId: string
   name?: string
+  fullName?: string
+  profilePictureUrl?: string
   phone?: string
   skills: string[]
   isAvailable: boolean
   availabilityStatus?: 'Online' | 'Busy' | 'Offline'
   status?: 'Online' | 'Busy' | 'Offline'
   rating: number
+  avgRating?: number
+  reviewCount?: number
   currentJobId?: string
   completedTotal?: number
   todayEarnings?: number

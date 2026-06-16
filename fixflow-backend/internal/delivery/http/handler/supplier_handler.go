@@ -719,6 +719,8 @@ func (h *SupplierHandler) CounterOffer(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
+	h.createNotificationHelper(ctx, updated.SupplierID, "Quotation Countered", fmt.Sprintf("Requester counter-offered Rs.%.2f for %s.", updated.CounterPrice, updated.MaterialName), "quotation")
+
 	event := websocket.WSEvent{
 		Type:   "quotation_update",
 		RoomID: "user:" + updated.SupplierID,
@@ -799,6 +801,8 @@ func (h *SupplierHandler) RejectQuotation(c *fiber.Ctx) error {
 		otherParty = updated.RequesterID
 	}
 
+	h.createNotificationHelper(ctx, otherParty, "Quotation Rejected", fmt.Sprintf("Quotation for %s was rejected.", updated.MaterialName), "quotation")
+
 	event := websocket.WSEvent{
 		Type:   "quotation_update",
 		RoomID: "user:" + otherParty,
@@ -840,15 +844,15 @@ func (h *SupplierHandler) GetStats(c *fiber.Ctx) error {
 		pendingCount = 0
 	}
 
-	// 3. Accepted quotations this month
+	// 3. Accepted/processed quotations this month
 	startOfMonth := time.Now().UTC().AddDate(0, 0, -time.Now().Day()+1)
 	var acceptedThisMonth int
 	var revenueThisMonth float64
 
-	// Since responded_at is updated when responded/accepted, we query for Accepted within the current month
+	// Since responded_at is updated when responded/accepted, we query for Accepted/Fulfilling/Delivered statuses within the current month
 	err = h.db.QueryRow(ctx, `SELECT COALESCE(COUNT(*), 0), COALESCE(SUM(offered_price * requested_qty), 0) 
 		FROM quotations 
-		WHERE supplier_id = $1 AND status = 'Accepted' AND responded_at >= $2`, userID, startOfMonth).Scan(&acceptedThisMonth, &revenueThisMonth)
+		WHERE supplier_id = $1 AND status IN ('Accepted', 'Preparing', 'Dispatched', 'Delivered') AND responded_at >= $2`, userID, startOfMonth).Scan(&acceptedThisMonth, &revenueThisMonth)
 
 	if err != nil {
 		acceptedThisMonth = 0
@@ -889,6 +893,9 @@ func (h *SupplierHandler) GetStats(c *fiber.Ctx) error {
 
 // notification helper handlers
 func (h *SupplierHandler) notifySupplier(ctx context.Context, q domain.Quotation) {
+	// Persistent notification
+	h.createNotificationHelper(ctx, q.SupplierID, "New Quotation Request", fmt.Sprintf("You received a new quotation request for %dx %s.", q.RequestedQty, q.MaterialName), "quotation")
+
 	// FCM Push
 	if h.fcmClient != nil {
 		title := "New quotation request"
@@ -922,6 +929,9 @@ func (h *SupplierHandler) notifySupplier(ctx context.Context, q domain.Quotation
 }
 
 func (h *SupplierHandler) notifyRequester(ctx context.Context, q domain.Quotation) {
+	// Persistent notification
+	h.createNotificationHelper(ctx, q.RequesterID, "Quotation Received", fmt.Sprintf("Supplier quoted Rs.%.2f for %s.", q.OfferedPrice, q.MaterialName), "quotation")
+
 	if h.fcmClient != nil {
 		title := "Quotation received"
 		body := fmt.Sprintf("Supplier quoted Rs.%.2f for %s", q.OfferedPrice, q.MaterialName)
@@ -947,6 +957,9 @@ func (h *SupplierHandler) notifyRequester(ctx context.Context, q domain.Quotatio
 }
 
 func (h *SupplierHandler) notifySupplierAccepted(ctx context.Context, q domain.Quotation) {
+	// Persistent notification
+	h.createNotificationHelper(ctx, q.SupplierID, "Quotation Accepted", fmt.Sprintf("Your quotation for %s was accepted!", q.MaterialName), "quotation")
+
 	if h.fcmClient != nil {
 		title := "Quotation accepted"
 		body := fmt.Sprintf("Your quotation for %s was accepted!", q.MaterialName)
@@ -1005,6 +1018,8 @@ func (h *SupplierHandler) UpdateOrderStatus(c *fiber.Ctx) error {
 	if userID == updated.SupplierID {
 		otherParty = updated.RequesterID
 	}
+
+	h.createNotificationHelper(ctx, otherParty, "Order Status Updated", fmt.Sprintf("Your material order for %s is now %s.", updated.MaterialName, string(updated.Status)), "quotation")
 
 	event := websocket.WSEvent{
 		Type:   "quotation_update",
@@ -1078,5 +1093,31 @@ func (h *SupplierHandler) UploadDeliveryPhoto(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"deliveryPhotoUrl": imageUrl,
+	})
+}
+
+func (h *SupplierHandler) createNotificationHelper(ctx context.Context, userID, title, message, typ string) {
+	q := `INSERT INTO notifications (user_id, title, message, type, metadata, is_read, created_at) 
+	      VALUES ($1,$2,$3,$4,'{}',false,NOW()) RETURNING id, created_at`
+	var notifID string
+	var createdAt time.Time
+	err := h.db.QueryRow(ctx, q, userID, title, message, typ).Scan(&notifID, &createdAt)
+	if err != nil {
+		log.Printf("[Supplier Handler] failed to create DB notification: %v", err)
+		return
+	}
+
+	_ = h.pubsubRepo.Publish(ctx, "ws:rooms", websocket.WSEvent{
+		Type:   "notification",
+		RoomID: "user:" + userID,
+		Payload: map[string]interface{}{
+			"id":        notifID,
+			"userId":    userID,
+			"title":     title,
+			"message":   message,
+			"type":      typ,
+			"isRead":    false,
+			"createdAt": createdAt.Format(time.RFC3339),
+		},
 	})
 }

@@ -88,6 +88,14 @@ func (s *Server) GenerateInvoice(ctx context.Context, req *paymentv1.GenerateInv
 		return nil, status.Error(codes.FailedPrecondition, "invoice can only be generated for completed jobs")
 	}
 
+	// Business rule: only one invoice per job
+	_, err = s.invoiceRepo.GetInvoiceByJobID(ctx, req.JobId)
+	if err == nil {
+		return nil, status.Error(codes.AlreadyExists, "invoice already generated for this job")
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, status.Errorf(codes.Internal, "failed to check existing invoice: %v", err)
+	}
+
 	// Fetch technician user ID and rating
 	var techUserID string
 	var techRating float64
@@ -165,6 +173,7 @@ func (s *Server) GenerateInvoice(ctx context.Context, req *paymentv1.GenerateInv
 		TaxRate:      0.18,
 		TaxAmount:    taxAmount,
 		Total:        total,
+		CreatedAt:    time.Now(),
 	}
 
 	// Fetch job address directly from database as it is not present in job.Job entity
@@ -198,6 +207,9 @@ func (s *Server) GenerateInvoice(ctx context.Context, req *paymentv1.GenerateInv
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to save invoice: %v", err)
 	}
+
+	// Save persistent notification + WS dispatch for customer
+	s.createNotificationHelper(ctx, job.CustomerID, "New Invoice Generated", fmt.Sprintf("An invoice of Rs.%.2f has been generated for your %s job.", saved.Total, job.ServiceType), "invoice")
 
 	// Map to response protobuf
 	pbItems := make([]*paymentv1.InvoiceItemPB, 0, len(saved.LineItems))
@@ -310,9 +322,33 @@ func (s *Server) VerifyAndCapture(ctx context.Context, req *paymentv1.VerifyAndC
 	_ = s.paymentRepo.UpdatePaymentStatus(ctx, req.OrderId, paymentdomain.Captured, req.PaymentId)
 	_ = s.redis.Del(ctx, "analytics:overview").Err()
 
-	// Mark job as paid in DB
+	// Mark job as paid in DB and create platform fee
 	if p, pErr := s.paymentRepo.GetPayment(ctx, req.OrderId); pErr == nil {
 		_, _ = s.db.Exec(ctx, "UPDATE jobs SET is_paid = true WHERE id = $1", p.JobID)
+
+		// Compute 8% platform fee on labour charge
+		var labourCharge float64
+		err := s.db.QueryRow(ctx, `
+			SELECT COALESCE(
+				(
+					SELECT (elem->>'unitPrice')::numeric 
+					FROM jsonb_array_elements(line_items) AS elem 
+					WHERE elem->>'description' LIKE 'Labour - %'
+					LIMIT 1
+				), 0
+			)
+			FROM invoices 
+			WHERE job_id = $1
+		`, p.JobID).Scan(&labourCharge)
+
+		if err == nil && labourCharge > 0 {
+			platformFee := labourCharge * 0.08
+			_, _ = s.db.Exec(ctx, `
+				INSERT INTO technician_platform_fees (technician_id, job_id, amount, status) 
+				VALUES ($1, $2, $3, 'Pending')
+				ON CONFLICT (job_id) DO NOTHING
+			`, p.TechnicianID, p.JobID, platformFee)
+		}
 	}
 
 	// Fetch payment record for notification & ws dispatch
@@ -320,6 +356,9 @@ func (s *Server) VerifyAndCapture(ctx context.Context, req *paymentv1.VerifyAndC
 	if err != nil {
 		return &paymentv1.VerifyAndCaptureResponse{Success: true, PaymentId: req.PaymentId}, nil
 	}
+
+	// Save persistent notification + WS dispatch for technician
+	s.createNotificationHelper(ctx, payment.TechnicianID, "Payment Received", fmt.Sprintf("Payment of Rs.%.2f has been received for job #%s.", payment.Amount, payment.JobID[0:8]), "payment")
 
 	// Notify technician asynchronously
 	if s.fcmClient != nil {
@@ -447,4 +486,30 @@ func s3ClientUpload(ctx context.Context, s3 *storage.S3Client, key string, bytes
 
 func (s *Server) InvalidateAnalyticsCache(ctx context.Context) {
 	_ = s.redis.Del(ctx, "analytics:overview").Err()
+}
+
+func (s *Server) createNotificationHelper(ctx context.Context, userID, title, message, typ string) {
+	q := `INSERT INTO notifications (user_id, title, message, type, metadata, is_read, created_at) 
+	      VALUES ($1,$2,$3,$4,'{}',false,NOW()) RETURNING id, created_at`
+	var notifID string
+	var createdAt time.Time
+	err := s.db.QueryRow(ctx, q, userID, title, message, typ).Scan(&notifID, &createdAt)
+	if err != nil {
+		log.Printf("[Payment Server] failed to create DB notification: %v", err)
+		return
+	}
+
+	_ = s.pubsubRepo.Publish(ctx, "ws:rooms", websocket.WSEvent{
+		Type:   "notification",
+		RoomID: "user:" + userID,
+		Payload: map[string]interface{}{
+			"id":        notifID,
+			"userId":    userID,
+			"title":     title,
+			"message":   message,
+			"type":      typ,
+			"isRead":    false,
+			"createdAt": createdAt.Format(time.RFC3339),
+		},
+	})
 }

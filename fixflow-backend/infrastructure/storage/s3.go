@@ -47,6 +47,14 @@ func (s *S3Client) EnsureBucket(ctx context.Context) error {
 			return fmt.Errorf("failed to create bucket: %w", err)
 		}
 	}
+
+	// Make the bucket public read-only so direct URLs can be loaded in the browser
+	policy := fmt.Sprintf(`{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":["s3:GetObject"],"Resource":["arn:aws:s3:::%s/*"]}]}`, s.bucket)
+	err = s.client.SetBucketPolicy(ctx, s.bucket, policy)
+	if err != nil {
+		return fmt.Errorf("failed to set public bucket policy: %w", err)
+	}
+
 	return nil
 }
 

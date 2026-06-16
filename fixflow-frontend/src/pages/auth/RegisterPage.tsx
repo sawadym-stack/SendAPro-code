@@ -98,7 +98,7 @@ const RegisterPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-950 flex items-stretch font-sans text-neutral-200 selection:bg-primary-500 selection:text-white">
+    <div className="min-h-screen bg-neutral-950 flex items-stretch font-sans text-neutral-200 selection:bg-primary-500 selection:text-white overflow-x-hidden">
       
       {/* Left panel: Telemetry & Premium branding (Desktop only) */}
       <div className="relative hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col justify-between p-12 overflow-hidden">
@@ -143,7 +143,7 @@ const RegisterPage = () => {
               <div className="flex items-center gap-2 text-primary-400 font-bold text-sm">
                 <CheckCircle2 size={16} /> Instant Dispatch
               </div>
-              <p className="text-xs text-neutral-500 mt-1">Match local jobs to closest specialists under 2 minutes.</p>
+              <p className="text-xs text-neutral-500 mt-1">Real-time scheduling and routing dispatch control.</p>
             </div>
             <div className="p-4 rounded-xl border border-neutral-900 bg-neutral-950/40 backdrop-blur-sm">
               <div className="flex items-center gap-2 text-secondary-400 font-bold text-sm">
@@ -165,7 +165,7 @@ const RegisterPage = () => {
       </div>
 
       {/* Right panel: Registration Form Card */}
-      <div className="w-full lg:w-1/2 xl:w-2/5 flex flex-col justify-center items-center p-6 sm:p-12 relative overflow-y-auto">
+      <div className="w-full lg:w-1/2 xl:w-2/5 flex flex-col justify-center items-center p-6 sm:p-12 relative overflow-x-hidden overflow-y-auto">
         <div className="absolute top-20 left-10 w-72 h-72 rounded-full bg-primary-900/10 blur-[120px] pointer-events-none lg:hidden" />
         <div className="absolute bottom-20 right-10 w-72 h-72 rounded-full bg-secondary-900/10 blur-[120px] pointer-events-none lg:hidden" />
 

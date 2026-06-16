@@ -7,6 +7,7 @@ import { Eye, EyeOff, Loader2, UserRound, CheckCircle, ArrowLeft } from 'lucide-
 import api from '../../services/api'
 import { useAuthStore } from '../../store/authStore'
 import { Button, Alert } from '../../components/ui'
+import { toast } from 'react-hot-toast'
 
 const schema = z.object({
   fullName: z.string().min(2, 'Name must be at least 2 characters'),
@@ -23,7 +24,6 @@ type FormValues = z.infer<typeof schema>
 
 export default function CustomerRegisterPage() {
   const navigate = useNavigate()
-  const setAuth = useAuthStore((s) => s.setAuth)
   const [showPass, setShowPass] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [error, setError] = useState('')
@@ -62,11 +62,9 @@ export default function CustomerRegisterPage() {
     setOtpLoading(true)
     setOtpError('')
     try {
-      const res = await api.post('/auth/verify-otp', { userId, otp })
-      const { accessToken, refreshToken } = res.data
-      const mockUser = { id: userId, name: '', email, phone: '', role: 'customer' as const, isVerified: true, createdAt: new Date().toISOString() }
-      setAuth(mockUser, accessToken, 'customer', refreshToken)
-      navigate('/customer/dashboard')
+      await api.post('/auth/verify-otp', { userId, otp })
+      toast.success('Email verified successfully! Please sign in to continue.')
+      navigate('/login')
     } catch (err: any) {
       setOtpError(err.response?.data?.error || 'Invalid OTP. Please try again.')
     } finally {
@@ -75,7 +73,7 @@ export default function CustomerRegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-6 font-sans">
+    <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-6 font-sans overflow-hidden relative">
       <div className="absolute top-20 left-10 w-72 h-72 rounded-full bg-sky-900/10 blur-[120px] pointer-events-none" />
       <div className="absolute bottom-20 right-10 w-72 h-72 rounded-full bg-blue-900/10 blur-[120px] pointer-events-none" />
 

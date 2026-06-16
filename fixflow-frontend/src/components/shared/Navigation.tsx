@@ -36,18 +36,37 @@ export const Sidebar: React.FC<SidebarProps> = ({ items, logo, title, dark }) =>
 
   return (
     <>
-      {/* Mobile menu button */}
-      <div className="fixed right-4 top-4 z-50 md:hidden">
-        <button onClick={() => setIsOpen(!isOpen)} className={`rounded-lg p-2 text-white ${dark ? 'bg-slate-900 border border-slate-800' : 'bg-primary-600'}`}>
-          {isOpen ? <X size={24} /> : <Menu size={24} />}
+      {/* Mobile Top Header */}
+      <div className={`fixed top-0 left-0 right-0 z-35 h-16 flex items-center justify-between px-4 border-b md:hidden backdrop-blur-md ${
+        dark 
+          ? 'bg-slate-950/90 border-slate-900 text-white' 
+          : 'bg-white/90 border-neutral-200 text-neutral-900'
+      }`}>
+        <div className="flex items-center gap-2.5">
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${dark ? 'bg-gradient-to-br from-sky-500 to-blue-600' : 'bg-primary-600'}`}>
+            <span className="text-white text-xs font-black">SP</span>
+          </div>
+          <div>
+            <span className="text-sm font-black tracking-tight">{title}</span>
+          </div>
+        </div>
+        
+        {/* Mobile menu trigger */}
+        <button 
+          onClick={() => setIsOpen(!isOpen)} 
+          className={`rounded-lg p-2 transition-colors cursor-pointer ${
+            dark ? 'hover:bg-slate-900 text-slate-400 hover:text-white' : 'hover:bg-neutral-100 text-neutral-650 hover:text-neutral-900'
+          }`}
+        >
+          {isOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
       </div>
 
       {/* Overlay */}
-      {isOpen && <div className="fixed inset-0 z-40 bg-black/50 md:hidden" onClick={() => setIsOpen(false)} />}
+      {isOpen && <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs md:hidden" onClick={() => setIsOpen(false)} />}
 
       {/* Sidebar */}
-      <aside className={`fixed left-0 top-0 z-40 h-screen w-64 transform transition-transform duration-300 md:relative md:transform-none ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} ${
+      <aside className={`fixed left-0 top-0 z-50 h-screen w-64 transform transition-transform duration-300 md:relative md:transform-none ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} ${
         dark 
           ? 'bg-slate-950 border-r border-slate-900 text-slate-200 flex flex-col justify-between' 
           : 'bg-white shadow-lg border-r border-neutral-200 flex flex-col justify-between'

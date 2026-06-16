@@ -12,11 +12,12 @@ import (
 	"github.com/yourname/fixflow-backend/infrastructure/firebase"
 	"github.com/yourname/fixflow-backend/internal/delivery/websocket"
 	"github.com/yourname/fixflow-backend/internal/domain/job"
+	repopg "github.com/yourname/fixflow-backend/internal/repository/postgres"
 	redisrepo "github.com/yourname/fixflow-backend/internal/repository/redis"
 )
 
 type Usecase interface {
-	CreateJob(ctx context.Context, customerID, serviceType, description string, lat, lng float64, urgency string, isEmergency bool) (*job.Job, error)
+	CreateJob(ctx context.Context, customerID, serviceType, description string, lat, lng float64, urgency string, isEmergency bool, technicianID string) (*job.Job, error)
 	GetJob(ctx context.Context, jobID string) (*job.Job, error)
 	UpdateJobStatus(ctx context.Context, jobID, newStatus, technicianID string) (*job.Job, error)
 	ListCustomerJobs(ctx context.Context, customerID string, page, pageSize int32) ([]*job.Job, int32, error)
@@ -29,6 +30,7 @@ type Usecase interface {
 
 type NotificationSender interface {
 	NotifyCustomer(ctx context.Context, customerID, title, message string) error
+	Create(ctx context.Context, userID, title, message, typ string) (*repopg.Notification, error)
 }
 
 type usecase struct {
@@ -58,8 +60,8 @@ func NewUsecase(repo job.Repository, notifier NotificationSender, rdb *redis.Cli
 	}
 }
 
-func (u *usecase) CreateJob(ctx context.Context, customerID, serviceType, description string, lat, lng float64, urgency string, isEmergency bool) (*job.Job, error) {
-	j := &job.Job{CustomerID: customerID, ServiceType: serviceType, Description: description, Latitude: lat, Longitude: lng, Urgency: urgency, IsEmergency: isEmergency, Status: job.StatusRequested}
+func (u *usecase) CreateJob(ctx context.Context, customerID, serviceType, description string, lat, lng float64, urgency string, isEmergency bool, technicianID string) (*job.Job, error) {
+	j := &job.Job{CustomerID: customerID, TechnicianID: technicianID, ServiceType: serviceType, Description: description, Latitude: lat, Longitude: lng, Urgency: urgency, IsEmergency: isEmergency, Status: job.StatusRequested}
 	if err := u.repo.Create(ctx, j); err != nil {
 		return nil, err
 	}
@@ -72,11 +74,17 @@ func (u *usecase) CreateJob(ctx context.Context, customerID, serviceType, descri
 		go func() {
 			ctx := context.Background()
 			
-			// Find nearby online technicians: 10km radius, same service type, max 5 technicians
-			techs, err := u.geoRepo.NearbyTechnicians(ctx, j.Latitude, j.Longitude, 10.0, j.ServiceType, 5)
-			if err != nil {
-				log.Printf("CreateJob: failed to scan nearby technicians: %v", err)
-				return
+			var techs []redisrepo.TechnicianLocation
+			var err error
+			if technicianID != "" {
+				techs = []redisrepo.TechnicianLocation{{TechnicianID: technicianID, DistanceKm: 0.0}}
+			} else {
+				// Find nearby online technicians: 10km radius, same service type, max 5 technicians
+				techs, err = u.geoRepo.NearbyTechnicians(ctx, j.Latitude, j.Longitude, 10.0, j.ServiceType, 5)
+				if err != nil {
+					log.Printf("CreateJob: failed to scan nearby technicians: %v", err)
+					return
+				}
 			}
 			
 			// Get customer name
@@ -91,10 +99,10 @@ func (u *usecase) CreateJob(ctx context.Context, customerID, serviceType, descri
 					continue
 				}
 				
-				// Verify availability from Redis: status must be Online (not Busy/Offline)
+				// Verify availability from Redis: status must be Online (not Busy/Offline) unless directly assigned
 				availabilityKey := "tech:availability:" + tech.TechnicianID
 				availStatus, err := u.rdb.HGet(ctx, availabilityKey, "status").Result()
-				if err != nil || availStatus != "Online" {
+				if err != nil || (availStatus != "Online" && technicianID == "") {
 					continue
 				}
 				
@@ -114,6 +122,9 @@ func (u *usecase) CreateJob(ctx context.Context, customerID, serviceType, descri
 						"createdAt":    j.CreatedAt.Format(time.RFC3339),
 					},
 				})
+
+				// Save persistent DB notification for the technician
+				_, _ = u.notifier.Create(ctx, userID, "New Booking Request", fmt.Sprintf("A new %s request is available near you: %s", j.ServiceType, j.Description), "booking_request")
 				
 				// FCM Push
 				if u.fcmClient != nil {
@@ -267,10 +278,27 @@ func (u *usecase) notifyStatusChange(ctx context.Context, j *job.Job) {
 		return
 	}
 	switch j.Status {
+	case job.StatusAccepted:
+		_ = u.notifier.NotifyCustomer(ctx, j.CustomerID, "Booking Accepted", "Your job request has been accepted by a technician.")
 	case job.StatusOnTheWay:
 		_ = u.notifier.NotifyCustomer(ctx, j.CustomerID, "Technician is on the way", "Your technician is heading to your location.")
+	case job.StatusArrived:
+		_ = u.notifier.NotifyCustomer(ctx, j.CustomerID, "Technician Arrived", "Your technician has arrived at your location.")
+	case job.StatusWorking:
+		_ = u.notifier.NotifyCustomer(ctx, j.CustomerID, "Work Started", "Your technician has started working on the job.")
 	case job.StatusCompleted:
 		_ = u.notifier.NotifyCustomer(ctx, j.CustomerID, "Job completed", "Your job has been marked as completed.")
+	case job.StatusCancelled:
+		// Send cancellation alert to customer
+		_ = u.notifier.NotifyCustomer(ctx, j.CustomerID, "Job Cancelled", fmt.Sprintf("Your job request #%s has been cancelled.", j.ID[0:8]))
+		// Also send cancellation alert to technician if assigned
+		if j.TechnicianID != "" && u.db != nil {
+			var techUserID string
+			_ = u.db.QueryRow(ctx, "SELECT user_id FROM technicians WHERE id = $1 OR user_id = $1", j.TechnicianID).Scan(&techUserID)
+			if techUserID != "" {
+				_ = u.notifier.NotifyCustomer(ctx, techUserID, "Job Cancelled", fmt.Sprintf("Job request #%s has been cancelled by the customer.", j.ID[0:8]))
+			}
+		}
 	}
 }
 
