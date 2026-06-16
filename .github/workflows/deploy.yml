@@ -75,7 +75,7 @@ jobs:
       - name: Frontend lint
         working-directory: fixflow-frontend
         run: |
-          npm ci
+          npm install
           npm run lint
           npx tsc --noEmit
 
