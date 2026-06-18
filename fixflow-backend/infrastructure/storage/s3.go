@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -13,10 +14,11 @@ import (
 )
 
 type S3Client struct {
-	client   *minio.Client
-	bucket   string
-	endpoint string
-	useSSL   bool
+	client    *minio.Client
+	bucket    string
+	endpoint  string
+	useSSL    bool
+	publicURL string
 }
 
 func NewS3Client(ctx context.Context, cfg *config.Config) (*S3Client, error) {
@@ -29,10 +31,11 @@ func NewS3Client(ctx context.Context, cfg *config.Config) (*S3Client, error) {
 	}
 
 	return &S3Client{
-		client:   client,
-		bucket:   cfg.MinIOBucket,
-		endpoint: cfg.MinIOEndpoint,
-		useSSL:   cfg.MinIOUseSSL,
+		client:    client,
+		bucket:    cfg.MinIOBucket,
+		endpoint:  cfg.MinIOEndpoint,
+		useSSL:    cfg.MinIOUseSSL,
+		publicURL: cfg.MinIOPublicURL,
 	}, nil
 }
 
@@ -65,6 +68,10 @@ func (s *S3Client) UploadFile(ctx context.Context, key string, reader io.Reader,
 		return "", fmt.Errorf("failed to upload object to minio: %w", err)
 	}
 
+	if s.publicURL != "" {
+		return fmt.Sprintf("%s/%s/%s", strings.TrimSuffix(s.publicURL, "/"), s.bucket, key), nil
+	}
+
 	scheme := "http"
 	if s.useSSL {
 		scheme = "https"
@@ -78,7 +85,20 @@ func (s *S3Client) GeneratePresignedURL(ctx context.Context, key string, expiry 
 	if err != nil {
 		return "", fmt.Errorf("failed to generate presigned GET url: %w", err)
 	}
-	return presignedURL.String(), nil
+
+	uStr := presignedURL.String()
+	if s.publicURL != "" {
+		u, parseErr := url.Parse(uStr)
+		if parseErr == nil {
+			publicU, publicParseErr := url.Parse(s.publicURL)
+			if publicParseErr == nil {
+				u.Scheme = publicU.Scheme
+				u.Host = publicU.Host
+				return u.String(), nil
+			}
+		}
+	}
+	return uStr, nil
 }
 
 func (s *S3Client) DeleteFile(ctx context.Context, key string) error {
@@ -88,3 +108,27 @@ func (s *S3Client) DeleteFile(ctx context.Context, key string) error {
 	}
 	return nil
 }
+
+// GetObject retrieves an object from the S3/MinIO bucket.
+// It automatically strips the bucket name prefix if present in the key.
+func (s *S3Client) GetObject(ctx context.Context, key string) (io.ReadCloser, string, int64, error) {
+	// Strip bucket prefix if present
+	bucketPrefix := s.bucket + "/"
+	if strings.HasPrefix(key, bucketPrefix) {
+		key = strings.TrimPrefix(key, bucketPrefix)
+	}
+
+	obj, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, "", 0, err
+	}
+
+	info, err := obj.Stat()
+	if err != nil {
+		obj.Close()
+		return nil, "", 0, err
+	}
+
+	return obj, info.ContentType, info.Size, nil
+}
+

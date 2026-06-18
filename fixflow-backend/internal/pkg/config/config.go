@@ -24,6 +24,7 @@ type Config struct {
 	MinIOSecretKey  string `mapstructure:"MINIO_SECRET_KEY"`
 	MinIOBucket     string `mapstructure:"MINIO_BUCKET"`
 	MinIOUseSSL     bool   `mapstructure:"MINIO_USE_SSL"`
+	MinIOPublicURL  string `mapstructure:"MINIO_PUBLIC_URL"`
 	JWTSecret       string `mapstructure:"JWT_SECRET"`
 	JWTExpiryHours  int    `mapstructure:"JWT_EXPIRY_HOURS"`
 	JWTAccessExpiryMinutes int `mapstructure:"JWT_ACCESS_EXPIRY_MINUTES"`
@@ -76,6 +77,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("MINIO_SECRET_KEY", "minioadmin")
 	v.SetDefault("MINIO_BUCKET", "fixflow")
 	v.SetDefault("MINIO_USE_SSL", false)
+	v.SetDefault("MINIO_PUBLIC_URL", "")
 	v.SetDefault("JWT_SECRET", "change-me")
 	v.SetDefault("JWT_EXPIRY_HOURS", 24)
 	v.SetDefault("JWT_ACCESS_EXPIRY_MINUTES", 15)

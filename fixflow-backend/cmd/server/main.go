@@ -304,6 +304,20 @@ func main() {
 	// Webhook route is public (NO auth middleware!)
 	app.Post("/api/v1/payments/webhook", paymentHandler.WebhookHandler)
 
+	// Storage proxy route for uploaded files (NO auth middleware so images can be loaded in <img src="..." />)
+	app.Get("/api/v1/storage/*", func(c *fiber.Ctx) error {
+		key := c.Params("*")
+		reader, contentType, size, err := s3Client.GetObject(c.Context(), key)
+		if err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "file not found"})
+		}
+		defer reader.Close()
+
+		c.Set("Content-Type", contentType)
+		c.Set("Content-Length", fmt.Sprintf("%d", size))
+		return c.SendStream(reader)
+	})
+
 	api := app.Group("/api/v1", middleware.FiberJWTAuth(tm))
 	api.Get("/notifications", notificationHandler.ListNotifications)
 	api.Patch("/notifications/:id/read", notificationHandler.MarkRead)

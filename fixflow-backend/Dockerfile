@@ -36,6 +36,7 @@ COPY . .
 # -trimpath removes local file paths from binary
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build \
+    -p 1 \
     -ldflags="-s -w -X main.Version=$(git describe --tags --always --dirty 2>/dev/null || echo 'unknown')" \
     -trimpath \
     -o /app/server \
