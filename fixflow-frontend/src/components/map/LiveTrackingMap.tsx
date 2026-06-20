@@ -45,7 +45,7 @@ const LiveTrackingMap = ({
 
     const getRoadRoute = async () => {
       try {
-        const url = `https://router.project-osrm.org/route/v1/driving/${parsedTechLng},${parsedTechLat};${parsedCustLng},${parsedCustLng}?overview=full&geometries=geojson`
+        const url = `https://router.project-osrm.org/route/v1/driving/${parsedTechLng},${parsedTechLat};${parsedCustLng},${parsedCustLat}?overview=full&geometries=geojson`
         const res = await fetch(url)
         if (res.ok) {
           const data = await res.json()

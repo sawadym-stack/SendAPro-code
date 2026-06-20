@@ -200,3 +200,25 @@
 ::-webkit-scrollbar-thumb {
   @apply rounded-full bg-neutral-300 transition-colors hover:bg-neutral-400;
 }
+
+/* Custom map animation keyframes */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.33);
+    opacity: 1;
+  }
+  80%, 100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
