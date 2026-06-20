@@ -74,8 +74,8 @@ const LeafletMap = ({
     
     mapRef.current = map
 
-    // Add premium CartoDB Dark Matter tiles
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    // Add premium CartoDB Voyager tiles (colored street map style like Google Maps)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
       attribution: '&copy; <a href="https://carto.com/">CARTO</a>'
     }).addTo(map)
