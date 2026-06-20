@@ -62,11 +62,59 @@ const NavigationPage = () => {
     return { lat: defaultStartLat, lng: defaultStartLng }
   }, [job])
 
-  // Set coordinates to start position when component mounts or route starts change
+  const [roadRoute, setRoadRoute] = useState<[number, number][]>([])
+
+  // 1. Set coordinates to start position when component mounts or route starts change
+  // Attempt to fetch the technician's real location first, fallback to routeStart Kozhikode fallback
   useEffect(() => {
-    setCurrentLat(routeStart.lat)
-    setCurrentLng(routeStart.lng)
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords
+          setCurrentLat(latitude)
+          setCurrentLng(longitude)
+          console.log('[Geolocation] Successfully obtained real device coordinates:', latitude, longitude)
+          // Push initial location update
+          technicianService.updateLocation(latitude, longitude).catch(() => {})
+        },
+        (error) => {
+          console.warn('[Geolocation] Failed or denied, falling back to routeStart:', error)
+          setCurrentLat(routeStart.lat)
+          setCurrentLng(routeStart.lng)
+        },
+        { enableHighAccuracy: true, timeout: 5000 }
+      )
+    } else {
+      setCurrentLat(routeStart.lat)
+      setCurrentLng(routeStart.lng)
+    }
   }, [routeStart])
+
+  // 2. Fetch OSRM road route coordinates between current position and customer destination
+  useEffect(() => {
+    if (!job?.latitude || !job?.longitude || !currentLat || !currentLng || isSimulating) return
+
+    const fetchRoute = async () => {
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${currentLng},${currentLat};${job.longitude},${job.latitude}?overview=full&geometries=geojson`
+        const res = await fetch(url)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.routes && data.routes.length > 0) {
+            const coords = data.routes[0].geometry.coordinates.map(
+              (c: [number, number]) => [c[1], c[0]] as [number, number]
+            )
+            setRoadRoute(coords)
+            console.log('[OSRM Route] Path loaded successfully. Total points:', coords.length)
+          }
+        }
+      } catch (err) {
+        console.error('Failed to query OSRM route path:', err)
+      }
+    }
+
+    fetchRoute()
+  }, [job?.latitude, job?.longitude, job?.id])
 
   // Cleanup simulation interval on unmount
   useEffect(() => {
@@ -77,28 +125,50 @@ const NavigationPage = () => {
     }
   }, [])
 
-  // Coordinate ref to always read latest position in the 10s GPS stream loop
+  // Coordinate ref to always read latest position in the watch/simulation loops
   const coordsRef = useRef({ lat: currentLat, lng: currentLng })
   useEffect(() => {
     coordsRef.current = { lat: currentLat, lng: currentLng }
   }, [currentLat, currentLng])
 
-  // GPS loop pushing coordinates every 10 seconds when status is OnTheWay
+  // 3. Real Geolocation GPS tracking watch loop (runs only when status is OnTheWay and NOT simulating)
   useEffect(() => {
-    if (job?.status !== JobStatus.OnTheWay) return
+    if (job?.status !== JobStatus.OnTheWay || isSimulating) return
 
-    const intervalId = window.setInterval(() => {
-      const { lat, lng } = coordsRef.current
-      console.log('[GPS Stream Loop] Pushing GPS coordinates:', lat, lng)
-      technicianService.updateLocation(lat, lng).catch((err) => {
-        console.error('[GPS Stream Loop] Failed to upload telemetry:', err)
-      })
-    }, 10000)
+    let watchId: number | null = null
+
+    if (navigator.geolocation) {
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords
+          setCurrentLat(latitude)
+          setCurrentLng(longitude)
+          console.log('[GPS Watch] Real-time coordinate update:', latitude, longitude)
+          // Push updates immediately to backend
+          technicianService.updateLocation(latitude, longitude).catch((err) => {
+            console.error('[GPS Watch] Failed to upload telemetry:', err)
+          })
+        },
+        (error) => {
+          console.error('[GPS Watch] Error watching GPS sensor:', error)
+        },
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+      )
+    } else {
+      // Legacy interval fallback if watchPosition is unsupported
+      const intervalId = window.setInterval(() => {
+        const { lat, lng } = coordsRef.current
+        technicianService.updateLocation(lat, lng).catch(() => {})
+      }, 10000)
+      return () => window.clearInterval(intervalId)
+    }
 
     return () => {
-      window.clearInterval(intervalId)
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId)
+      }
     }
-  }, [job?.status])
+  }, [job?.status, isSimulating])
 
   // Start navigation simulation
   const startSimulation = (mode: 'normal' | 'fast' | 'instant' = 'normal') => {
@@ -119,7 +189,9 @@ const NavigationPage = () => {
     setIsSimulating(true)
     setSpeed(48) // Starting speed in km/h
 
-    const totalSteps = 20
+    // Animate along OSRM road coordinates if available, otherwise straight-line fallback
+    const points = roadRoute.length > 3 ? roadRoute : []
+    const totalSteps = points.length > 0 ? points.length : 20
     const intervalMs = mode === 'fast' ? 150 : 500
     let step = 0
 
@@ -127,17 +199,22 @@ const NavigationPage = () => {
       clearInterval(simulationIntervalRef.current)
     }
 
-    // Set initial coordinates
-    setCurrentLat(routeStart.lat)
-    setCurrentLng(routeStart.lng)
-
     simulationIntervalRef.current = window.setInterval(() => {
       step++
-      const progress = step / totalSteps
-      
-      // Interpolate coordinates
-      const nextLat = routeStart.lat + (destLat - routeStart.lat) * progress
-      const nextLng = routeStart.lng + (destLng - routeStart.lng) * progress
+      let nextLat: number
+      let nextLng: number
+
+      if (points.length > 0) {
+        // Move along the road path
+        const idx = Math.min(step, points.length - 1)
+        nextLat = points[idx][0]
+        nextLng = points[idx][1]
+      } else {
+        // Straight line interpolation fallback
+        const progress = step / totalSteps
+        nextLat = routeStart.lat + (destLat - routeStart.lat) * progress
+        nextLng = routeStart.lng + (destLng - routeStart.lng) * progress
+      }
 
       setCurrentLat(nextLat)
       setCurrentLng(nextLng)

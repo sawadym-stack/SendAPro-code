@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import LeafletMap from './LeafletMap'
 import type { MapMarker } from './LeafletMap'
 
@@ -17,7 +17,6 @@ const LiveTrackingMap = ({
   technicianLng,
   onMapLoad,
 }: LiveTrackingMapProps) => {
-  
   const parsedCustLat = customerLat != null ? parseFloat(customerLat as any) : NaN
   const parsedCustLng = customerLng != null ? parseFloat(customerLng as any) : NaN
   const parsedTechLat = technicianLat != null ? parseFloat(technicianLat as any) : NaN
@@ -25,6 +24,46 @@ const LiveTrackingMap = ({
 
   const hasCust = !isNaN(parsedCustLat) && !isNaN(parsedCustLng)
   const hasTech = !isNaN(parsedTechLat) && !isNaN(parsedTechLng)
+
+  const [roadCoords, setRoadCoords] = useState<[number, number][]>([])
+  const lastFetchedRef = useRef<{ lat: number; lng: number } | null>(null)
+
+  // Fetch actual driving road route from OSRM when coordinates change
+  useEffect(() => {
+    if (!hasCust || !hasTech) return
+
+    // Calculate distance since last fetch to prevent spamming OSRM during fast simulations
+    const dist = lastFetchedRef.current
+      ? Math.sqrt(
+          Math.pow(parsedTechLat - lastFetchedRef.current.lat, 2) +
+            Math.pow(parsedTechLng - lastFetchedRef.current.lng, 2)
+        )
+      : 999
+
+    // Only refetch if the technician moved by ~100m or if it's the first render
+    if (dist < 0.001) return
+
+    const getRoadRoute = async () => {
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${parsedTechLng},${parsedTechLat};${parsedCustLng},${parsedCustLng}?overview=full&geometries=geojson`
+        const res = await fetch(url)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.routes && data.routes.length > 0) {
+            const coords = data.routes[0].geometry.coordinates.map(
+              (c: [number, number]) => [c[1], c[0]] as [number, number]
+            )
+            setRoadCoords(coords)
+            lastFetchedRef.current = { lat: parsedTechLat, lng: parsedTechLng }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch road route for map:', err)
+      }
+    }
+
+    getRoadRoute()
+  }, [parsedCustLat, parsedCustLng, parsedTechLat, parsedTechLng, hasCust, hasTech])
 
   // Center is the midpoint between customer and technician
   const center = useMemo(() => {
@@ -67,19 +106,25 @@ const LiveTrackingMap = ({
     return list
   }, [parsedCustLat, parsedCustLng, parsedTechLat, parsedTechLng, hasCust, hasTech])
 
-  // Route path coords
+  // Route path coords along roads
   const polylineCoords = useMemo((): [number, number][] | undefined => {
     if (!hasCust || !hasTech) return undefined
+    if (roadCoords.length > 0) {
+      // Connect current technician location to the start of the fetched road coords
+      return [[parsedTechLat, parsedTechLng], ...roadCoords]
+    }
+    // Fallback to straight line
     return [
       [parsedCustLat, parsedCustLng],
       [parsedTechLat, parsedTechLng],
     ]
-  }, [parsedCustLat, parsedCustLng, parsedTechLat, parsedTechLng, hasCust, hasTech])
+  }, [parsedCustLat, parsedCustLng, parsedTechLat, parsedTechLng, hasCust, hasTech, roadCoords])
 
   // Fire loading handler immediately as Leaflet is loaded
   if (onMapLoad) {
     onMapLoad()
   }
+
 
   return (
     <div className="relative h-[360px] overflow-hidden rounded-xl border border-slate-900 bg-slate-950 shadow-inner">

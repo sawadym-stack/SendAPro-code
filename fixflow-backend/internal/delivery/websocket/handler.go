@@ -3,10 +3,13 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/websocket/v2"
@@ -73,20 +76,53 @@ func WSHandler(hub *Hub, jwtSecret string) fiber.Handler {
 			ctx := context.Background()
 
 			var techID string
-			err := hub.DB.QueryRow(ctx, "SELECT COALESCE(technician_id::text, '') FROM jobs WHERE id = $1", jobID).Scan(&techID)
+			var jobLat, jobLng float64
+			err := hub.DB.QueryRow(ctx, "SELECT COALESCE(technician_id::text, ''), COALESCE(ST_Y(location::geometry), 0), COALESCE(ST_X(location::geometry), 0) FROM jobs WHERE id = $1", jobID).Scan(&techID, &jobLat, &jobLng)
 			if err == nil && techID != "" {
 				location, err := hub.redis.HGetAll(ctx, "tech:location:"+techID).Result()
-				if err == nil && len(location) > 0 {
-					latVal, _ := strconv.ParseFloat(location["lat"], 64)
-					lngVal, _ := strconv.ParseFloat(location["lng"], 64)
+				var latVal, lngVal float64
+				var gotLocation bool
+
+				if err == nil && len(location) > 0 && location["lat"] != "" && location["lng"] != "" {
+					latVal, _ = strconv.ParseFloat(location["lat"], 64)
+					lngVal, _ = strconv.ParseFloat(location["lng"], 64)
+					gotLocation = true
+				} else {
+					// Fallback to query database for last known technician location
+					q := `SELECT COALESCE(ST_Y(current_location::geometry), 0), COALESCE(ST_X(current_location::geometry), 0)
+					      FROM technicians 
+					      WHERE id = $1 OR user_id = $1`
+					dbErr := hub.DB.QueryRow(ctx, q, techID).Scan(&latVal, &lngVal)
+					if dbErr == nil && latVal != 0 && lngVal != 0 {
+						// Store back in Redis
+						_ = hub.redis.HSet(ctx, "tech:location:"+techID, map[string]interface{}{
+							"lat":       fmt.Sprintf("%f", latVal),
+							"lng":       fmt.Sprintf("%f", lngVal),
+							"timestamp": fmt.Sprintf("%d", time.Now().Unix()),
+							"jobId":     jobID,
+						}).Err()
+						gotLocation = true
+					}
+				}
+
+				if gotLocation {
+					// Calculate initial distance & ETA based on average speed (30 km/h)
+					dx := jobLng - lngVal
+					dy := jobLat - latVal
+					dist := math.Sqrt(dx*dx + dy*dy) * 111.0
+					eta := int(dist / 0.5) // approx 0.5 km per minute
+					if eta < 1 {
+						eta = 1
+					}
+
 					event := WSEvent{
 						Type:   "location_update",
 						RoomID: room,
 						Payload: map[string]interface{}{
-							"lat":       latVal,
-							"lng":       lngVal,
-							"timestamp": location["timestamp"],
-							"jobId":     location["jobId"],
+							"lat":   latVal,
+							"lng":   lngVal,
+							"jobId": jobID,
+							"eta":   eta,
 						},
 					}
 					if msgBytes, err := json.Marshal(event); err == nil {
