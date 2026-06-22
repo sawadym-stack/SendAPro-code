@@ -361,12 +361,6 @@ function SupplierDrawer({
   const [submittingBulk, setSubmittingBulk] = useState(false)
   const [bulkDeliveryMode, setBulkDeliveryMode] = useState<'delivery' | 'pickup'>('delivery')
 
-  useEffect(() => {
-    if (bulkTotal <= 5000) {
-      setBulkDeliveryMode('pickup')
-    }
-  }, [bulkTotal])
-
   const { data, isLoading } = useQuery({
     queryKey: [QUERY_KEYS.materials, supplier.id],
     queryFn: () => supplierService.getMaterials({ supplierId: supplier.id }),
@@ -396,6 +390,12 @@ function SupplierDrawer({
   const bulkTotal = useMemo(() => {
     return bulkItems.reduce((sum, item) => sum + item.material.price * item.qty, 0)
   }, [bulkItems])
+
+  useEffect(() => {
+    if (bulkTotal <= 5000) {
+      setBulkDeliveryMode('pickup')
+    }
+  }, [bulkTotal])
 
   const handleSubmitBulk = async () => {
     if (bulkItems.length === 0) {
