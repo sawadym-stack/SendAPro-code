@@ -277,8 +277,9 @@ func (s *Server) CreatePaymentOrder(ctx context.Context, req *paymentv1.CreatePa
 		return nil, status.Errorf(codes.NotFound, "technician user not resolved: %v", err)
 	}
 
-	// Create Razorpay order
-	order, err := s.razorpayClient.CreateOrder(ctx, amountPaise, "INR", req.JobId, map[string]string{"jobId": req.JobId})
+	// Create Razorpay order with unique receipt ID (max 40 chars)
+	receiptID := fmt.Sprintf("rcpt_%s_%d", req.JobId[:8], time.Now().Unix())
+	order, err := s.razorpayClient.CreateOrder(ctx, amountPaise, "INR", receiptID, map[string]string{"jobId": req.JobId})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "razorpay order creation failed: %v", err)
 	}
