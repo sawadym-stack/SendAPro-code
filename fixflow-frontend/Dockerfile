@@ -5,7 +5,7 @@ WORKDIR /app
 
 # Cache node_modules
 COPY package*.json ./
-RUN npm ci --prefer-offline
+RUN npm install --prefer-offline
 
 # Copy source and build
 COPY . .
