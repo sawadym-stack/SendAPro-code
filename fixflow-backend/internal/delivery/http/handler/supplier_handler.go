@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"path/filepath"
@@ -524,6 +525,40 @@ func (h *SupplierHandler) RequestQuotation(c *fiber.Ctx) error {
 	supplier, err := h.supplierRepo.GetSupplier(ctx, material.SupplierID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "supplier profile not found"})
+	}
+
+	// Enforce 5000 Rs delivery limit
+	totalPrice := material.Price * float64(body.RequestedQty)
+	isBulk := strings.Contains(body.Notes, "[Bulk BOM Request]")
+	if isBulk {
+		// Example: [Bulk BOM Request] [{"id":"...","price":45.0,"qty":2}]
+		startIdx := strings.Index(body.Notes, "[Bulk BOM Request] ")
+		if startIdx != -1 {
+			jsonStr := body.Notes[startIdx+len("[Bulk BOM Request] "):]
+			endIdx := strings.Index(jsonStr, " | Project Notes:")
+			if endIdx != -1 {
+				jsonStr = jsonStr[:endIdx]
+			}
+			type BulkItem struct {
+				Price float64 `json:"price"`
+				Qty   int     `json:"qty"`
+			}
+			var bulkItems []BulkItem
+			if jsonErr := json.Unmarshal([]byte(jsonStr), &bulkItems); jsonErr == nil {
+				bulkTotal := 0.0
+				for _, item := range bulkItems {
+					bulkTotal += item.Price * float64(item.Qty)
+				}
+				totalPrice = bulkTotal
+			}
+		}
+	}
+
+	isPickup := strings.Contains(body.Notes, "[Mode: Self-Pickup]")
+	if totalPrice <= 5000.0 && !isPickup {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Delivery option is only available for purchases above Rs. 5000. Under Rs. 5000 is Self-Pickup only.",
+		})
 	}
 
 	q := domain.Quotation{

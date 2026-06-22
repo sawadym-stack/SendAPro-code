@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
 import LeafletMap from '../../components/map/LeafletMap'
@@ -359,6 +359,13 @@ function SupplierDrawer({
   const [bulkItems, setBulkItems] = useState<Array<{ material: Material; qty: number }>>([])
   const [bulkNotes, setBulkNotes] = useState('')
   const [submittingBulk, setSubmittingBulk] = useState(false)
+  const [bulkDeliveryMode, setBulkDeliveryMode] = useState<'delivery' | 'pickup'>('delivery')
+
+  useEffect(() => {
+    if (bulkTotal <= 5000) {
+      setBulkDeliveryMode('pickup')
+    }
+  }, [bulkTotal])
 
   const { data, isLoading } = useQuery({
     queryKey: [QUERY_KEYS.materials, supplier.id],
@@ -403,7 +410,8 @@ function SupplierDrawer({
         qty: item.qty,
         price: item.material.price,
       }))
-      const notesPayload = `[Bulk BOM Request] ${JSON.stringify(serializedItems)} | Project Notes: ${bulkNotes}`
+      const prefix = bulkDeliveryMode === 'pickup' ? '[Mode: Self-Pickup] ' : ''
+      const notesPayload = `${prefix}[Bulk BOM Request] ${JSON.stringify(serializedItems)} | Project Notes: ${bulkNotes}`
 
       // Create a quotation using the first item as the database anchor key
       await supplierService.requestQuotation({
@@ -629,6 +637,41 @@ function SupplierDrawer({
                   <span className="text-lg font-black text-white font-mono">Rs. {bulkTotal.toFixed(2)}</span>
                 </div>
 
+                {/* Fulfillment Mode selector for Bulk requests */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-semibold text-slate-400 block">Fulfillment Mode</label>
+                  <div className="grid grid-cols-2 gap-2 bg-slate-950 border border-slate-850 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      disabled={bulkTotal <= 5000}
+                      onClick={() => setBulkDeliveryMode('delivery')}
+                      className={`py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
+                        bulkDeliveryMode === 'delivery'
+                          ? 'bg-slate-800 text-sky-400 border border-slate-700 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-350'
+                      } ${bulkTotal <= 5000 ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    >
+                      🚚 Delivery
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBulkDeliveryMode('pickup')}
+                      className={`py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
+                        bulkDeliveryMode === 'pickup'
+                          ? 'bg-slate-800 text-sky-400 border border-slate-700 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-350'
+                      }`}
+                    >
+                      🛍️ Self-Pickup
+                    </button>
+                  </div>
+                  {bulkTotal <= 5000 && (
+                    <p className="text-[10px] text-amber-450 font-medium">
+                      ⚠️ Delivery is only available for projects above Rs. 5,000.
+                    </p>
+                  )}
+                </div>
+
                 <div>
                   <label className="text-xs font-semibold text-slate-400 block mb-1">
                     Project notes / custom specifications
@@ -683,6 +726,17 @@ function RequestQuotationModal({
   const [notes, setNotes] = useState('')
   const [jobId, setJobId] = useState(initialJobId)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const totalPrice = useMemo(() => {
+    const q = parseInt(qty, 10)
+    return isNaN(q) ? 0 : q * material.price
+  }, [qty, material.price])
+
+  useEffect(() => {
+    if (totalPrice <= 5000) {
+      setDeliveryMode('pickup')
+    }
+  }, [totalPrice])
 
   // Fetch customer's active/pending jobs to optionally link
   const { data: jobsResponse } = useQuery({
@@ -771,12 +825,13 @@ function RequestQuotationModal({
             <div className="grid grid-cols-2 gap-2 bg-slate-950 border border-slate-850 p-1 rounded-xl">
               <button
                 type="button"
+                disabled={totalPrice <= 5000}
                 onClick={() => setDeliveryMode('delivery')}
                 className={`py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
                   deliveryMode === 'delivery'
                     ? 'bg-slate-800 text-sky-400 border border-slate-700 shadow-sm'
                     : 'text-slate-500 hover:text-slate-350'
-                }`}
+                } ${totalPrice <= 5000 ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
                 🚚 Delivery
               </button>
@@ -792,6 +847,11 @@ function RequestQuotationModal({
                 🛍️ Self-Pickup
               </button>
             </div>
+            {totalPrice <= 5000 && (
+              <p className="text-[10px] text-amber-400 font-semibold mt-1">
+                ⚠️ Delivery is only available for orders above Rs. 5,000.
+              </p>
+            )}
           </div>
 
           <div>
