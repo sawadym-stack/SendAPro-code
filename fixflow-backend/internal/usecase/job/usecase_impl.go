@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"sync"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/yourname/fixflow-backend/internal/domain/job"
 	repopg "github.com/yourname/fixflow-backend/internal/repository/postgres"
 	redisrepo "github.com/yourname/fixflow-backend/internal/repository/redis"
+	"github.com/yourname/fixflow-backend/pkg/utils"
 )
 
 type Usecase interface {
@@ -231,6 +233,52 @@ func (u *usecase) UpdateJobStatus(ctx context.Context, jobID, newStatus, technic
 	u.mu.Unlock()
 	u.publish(jobID, j)
 	u.notifyStatusChange(ctx, j)
+
+	// Publish job status update event to Redis Pub/Sub so clients get it in real-time
+	var etaMin int
+	if next == job.StatusOnTheWay && u.rdb != nil {
+		vals, err := u.rdb.HMGet(ctx, "tech:location:"+j.TechnicianID, "lat", "lng").Result()
+		if err == nil && len(vals) == 2 && vals[0] != nil && vals[1] != nil {
+			latVal, _ := strconv.ParseFloat(vals[0].(string), 64)
+			lngVal, _ := strconv.ParseFloat(vals[1].(string), 64)
+			if latVal != 0 && lngVal != 0 {
+				distKm := utils.Haversine(latVal, lngVal, j.Latitude, j.Longitude)
+				etaMin = utils.CalculateETA(distKm)
+			}
+		}
+		if etaMin == 0 && u.db != nil {
+			var latVal, lngVal float64
+			q := `SELECT COALESCE(ST_Y(current_location::geometry), 0), COALESCE(ST_X(current_location::geometry), 0)
+			      FROM technicians 
+			      WHERE id = $1 OR user_id = $1`
+			dbErr := u.db.QueryRow(ctx, q, j.TechnicianID).Scan(&latVal, &lngVal)
+			if dbErr == nil && latVal != 0 && lngVal != 0 {
+				distKm := utils.Haversine(latVal, lngVal, j.Latitude, j.Longitude)
+				etaMin = utils.CalculateETA(distKm)
+			}
+		}
+	}
+
+	if u.pubsubRepo != nil {
+		payload := map[string]interface{}{
+			"type":            "job_status",
+			"jobId":           j.ID,
+			"status":          string(j.Status),
+			"technicianName":  j.TechnicianName,
+			"technicianPhone": j.TechnicianPhone,
+			"customerName":    j.CustomerName,
+			"customerPhone":   j.CustomerPhone,
+		}
+		if etaMin > 0 {
+			payload["eta"] = etaMin
+		}
+		_ = u.pubsubRepo.Publish(ctx, "ws:rooms", websocket.WSEvent{
+			Type:    "job_status",
+			RoomID:  "job:" + j.ID,
+			Payload: payload,
+		})
+	}
+
 	if u.rdb != nil {
 		_ = u.rdb.Del(ctx, "analytics:overview").Err()
 	}
