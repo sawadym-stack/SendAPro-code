@@ -7,6 +7,8 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/gofiber/adaptor/v2"
@@ -263,7 +265,7 @@ func main() {
 	// Enable CORS for all origins, headers and methods
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
-		AllowHeaders: "*",
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Requested-With",
 		AllowMethods: "GET,POST,HEAD,PUT,DELETE,PATCH,OPTIONS",
 	}))
 	app.Get("/health", func(c *fiber.Ctx) error {
@@ -312,6 +314,24 @@ func main() {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "file not found"})
 		}
 		defer reader.Close()
+
+		if contentType == "" || contentType == "application/octet-stream" {
+			ext := strings.ToLower(filepath.Ext(key))
+			switch ext {
+			case ".jpg", ".jpeg":
+				contentType = "image/jpeg"
+			case ".png":
+				contentType = "image/png"
+			case ".gif":
+				contentType = "image/gif"
+			case ".webp":
+				contentType = "image/webp"
+			case ".svg":
+				contentType = "image/svg+xml"
+			case ".pdf":
+				contentType = "application/pdf"
+			}
+		}
 
 		c.Set("Content-Type", contentType)
 		c.Set("Content-Length", fmt.Sprintf("%d", size))
