@@ -83,10 +83,11 @@ func (h *UploadHandler) ChatUpload(c *fiber.Ctx) error {
 	key := fmt.Sprintf("chat/%s/%d_%s", roomID, timestamp, filename)
 
 	// Upload to MinIO
-	mediaURL, err := h.s3.UploadFile(ctx, key, src, size, contentType)
+	_, err = h.s3.UploadFile(ctx, key, src, size, contentType)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("upload failed: %v", err)})
 	}
+	mediaURL := getPublicURL(c, h.s3, key)
 
 	// Generate presigned URL
 	expiry := 24 * time.Hour
@@ -171,10 +172,11 @@ func (h *UploadHandler) JobImages(c *fiber.Ctx) error {
 	key := fmt.Sprintf("jobs/%s/%s_%d%s", jobID, imageType, timestamp, ext)
 
 	// Upload to MinIO
-	imageURL, err := h.s3.UploadFile(ctx, key, src, size, contentType)
+	_, err = h.s3.UploadFile(ctx, key, src, size, contentType)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "upload failed"})
 	}
+	imageURL := getPublicURL(c, h.s3, key)
 
 	// Save URL to job record
 	err = h.jobRepo.AddJobImage(ctx, jobID, imageType, imageURL)
@@ -229,10 +231,11 @@ func (h *UploadHandler) UserUpload(c *fiber.Ctx) error {
 	}
 	key := fmt.Sprintf("users/%s/upload_%d%s", userID, timestamp, ext)
 
-	imageUrl, err := h.s3.UploadFile(ctx, key, src, size, contentType)
+	_, err = h.s3.UploadFile(ctx, key, src, size, contentType)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "upload failed"})
 	}
+	imageUrl := getPublicURL(c, h.s3, key)
 
 	presignedURL, err := h.s3.GeneratePresignedURL(ctx, key, 24*time.Hour)
 	if err != nil {
@@ -248,4 +251,11 @@ func (h *UploadHandler) UserUpload(c *fiber.Ctx) error {
 		"imageUrl":     imageUrl,
 		"presignedUrl": presignedURL,
 	})
+}
+
+func getPublicURL(c *fiber.Ctx, s3 *storage.S3Client, key string) string {
+	if s3.PublicURL() != "" {
+		return fmt.Sprintf("%s/%s/%s", strings.TrimSuffix(s3.PublicURL(), "/"), s3.Bucket(), key)
+	}
+	return fmt.Sprintf("%s/api/v1/storage/%s/%s", strings.TrimSuffix(c.BaseURL(), "/"), s3.Bucket(), key)
 }

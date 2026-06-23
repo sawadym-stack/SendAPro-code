@@ -1115,10 +1115,11 @@ func (h *SupplierHandler) UploadDeliveryPhoto(c *fiber.Ctx) error {
 	}
 	key := fmt.Sprintf("quotations/%s/delivery_%d%s", quotationID, timestamp, ext)
 
-	imageUrl, err := h.s3.UploadFile(ctx, key, src, size, contentType)
+	_, err = h.s3.UploadFile(ctx, key, src, size, contentType)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "upload failed"})
 	}
+	imageUrl := getPublicURL(c, h.s3, key)
 
 	q.DeliveryPhotoUrl = imageUrl
 	_, err = h.quotationRepo.UpdateQuotation(ctx, q)
@@ -1130,6 +1131,7 @@ func (h *SupplierHandler) UploadDeliveryPhoto(c *fiber.Ctx) error {
 		"deliveryPhotoUrl": imageUrl,
 	})
 }
+
 
 func (h *SupplierHandler) createNotificationHelper(ctx context.Context, userID, title, message, typ string) {
 	q := `INSERT INTO notifications (user_id, title, message, type, metadata, is_read, created_at) 

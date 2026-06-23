@@ -132,3 +132,12 @@ func (s *S3Client) GetObject(ctx context.Context, key string) (io.ReadCloser, st
 	return obj, info.ContentType, info.Size, nil
 }
 
+func (s *S3Client) Bucket() string {
+	return s.bucket
+}
+
+func (s *S3Client) PublicURL() string {
+	return s.publicURL
+}
+
+
