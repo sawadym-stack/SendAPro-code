@@ -313,7 +313,6 @@ func main() {
 		if err != nil {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "file not found"})
 		}
-		defer reader.Close()
 
 		if contentType == "" || contentType == "application/octet-stream" {
 			ext := strings.ToLower(filepath.Ext(key))
