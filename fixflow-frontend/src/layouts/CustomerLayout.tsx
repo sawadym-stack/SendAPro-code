@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
-import { LayoutDashboard, ClipboardList, Siren, Clock, MapPin, Store, CreditCard, User, Menu, X, LogOut } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Siren, Clock, MapPin, Store, CreditCard, User, Menu, X, LogOut, FileText } from 'lucide-react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 
@@ -11,6 +11,7 @@ const navItems = [
   { label: 'Job History', path: '/customer/jobs', icon: Clock },
   { label: 'Nearby Techs', path: '/customer/nearby-technicians', icon: MapPin },
   { label: 'Suppliers', path: '/customer/suppliers', icon: Store },
+  { label: 'Quotations', path: '/customer/quotations', icon: FileText },
   { label: 'Payments', path: '/customer/payments', icon: CreditCard },
   { label: 'Profile', path: '/customer/profile', icon: User },
 ]
@@ -133,7 +134,7 @@ const CustomerLayout = () => {
         </div>
 
         <nav className="space-y-1.5 mb-6">
-          {[navItems[3], navItems[5], navItems[6], navItems[7]].map((item) => {
+          {[navItems[3], navItems[5], navItems[6], navItems[7], navItems[8]].map((item) => {
             const Icon = item.icon
             return (
               <NavLink
