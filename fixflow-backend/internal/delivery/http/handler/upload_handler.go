@@ -257,5 +257,10 @@ func getPublicURL(c *fiber.Ctx, s3 *storage.S3Client, key string) string {
 	if s3.PublicURL() != "" {
 		return fmt.Sprintf("%s/%s/%s", strings.TrimSuffix(s3.PublicURL(), "/"), s3.Bucket(), key)
 	}
-	return fmt.Sprintf("%s/api/v1/storage/%s/%s", strings.TrimSuffix(c.BaseURL(), "/"), s3.Bucket(), key)
+	baseURL := c.BaseURL()
+	// Detect if proxy has terminated SSL, and rewrite to https scheme to avoid mixed content blocked by browsers
+	if c.Get("X-Forwarded-Proto") == "https" || strings.Contains(c.Get("X-Forwarded-Proto"), "https") {
+		baseURL = strings.Replace(baseURL, "http://", "https://", 1)
+	}
+	return fmt.Sprintf("%s/api/v1/storage/%s/%s", strings.TrimSuffix(baseURL, "/"), s3.Bucket(), key)
 }
